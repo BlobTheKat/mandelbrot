@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Mandelbrot CPU</title>
+	<style>
+		body{
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			margin: 0;
+			background: #000;
+		}
+		body, html{
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+		}
+		canvas{
+			width: 100%;
+			height: 100%;
+			flex-shrink: 0;
+			image-rendering: pixelated;
+			transform-origin: top left;
+		}
+	</style>
+</head>
+<body>
+	<script src="./gpu.js"></script>
+	<canvas id="canvas"></canvas>
+	<script>
+		let WIDTH = innerWidth * devicePixelRatio
+		let HEIGHT = innerHeight * devicePixelRatio
+		let ITERATIONS = 100
+		const OFFSET = 168; //offset from which buffers start. Must be multiple of 4.
+		let fsize = 4; //size of a number in bytes
+		let c = canvas.getContext('2d')
+		let x, rx = 0
+		let y, ry = 0
+		let z, rz = 1
+		let CONST, CONST2
+		function cons(v, con = CONST){
+			con[0] = Math.floor(v)
+			con[1] = Math.floor(v * 4294967296)
+			con[2] = Math.floor(v * 18446744073709552000)
+			return con.byteOffset
+		}
+		function get(a){
+			return ~~a[0] + (a[1]||0) / 4294967296 + (a[2]||0) / 18446744073709552000
+		}
+		function getunsigned(a){
+			return a[0] + (a[1]||0) / 4294967296 + (a[2]||0) / 18446744073709552000
+		}
+		fetch('./mandel2.wasm').then(a=>a.arrayBuffer()).then(a=>WebAssembly.instantiate(a)).then(({instance: {exports: w}}) => {
+			window.w = w
+			w.memory.grow(1024); int=new Uint32Array(w.memory.buffer)
+			function setprecision(l){
+				l = Math.max(2, l)
+				fsize = l * 4
+				//5* l are reserved for some core variables
+				int.set(new Array(l * 5).fill(0), OFFSET / 4)
+				//assign pointers
+				w._Z9setValuesPji(OFFSET + fsize * 5, l)
+				let o = OFFSET / 4
+				x = int.subarray(o, o += l)
+				y = int.subarray(o, o += l)
+				z = int.subarray(o, o += l)
+				CONST = int.subarray(o, o += l)
+				CONST2 = int.subarray(o, o += l)
+			}
+			setprecision(4)
+			function draw(){
+				w._Z11multiassignPjS_S_S_(CONST.byteOffset, CONST2.byteOffset, x.byteOffset, y.byteOffset)
+				w._Z4drawPjS_S_iii(CONST.byteOffset, CONST2.byteOffset, z.byteOffset, canvas.width, canvas.height, ITERATIONS)
+				let img = new ImageData(new Uint8ClampedArray(w.memory.buffer).subarray(65536,65536+canvas.width*canvas.height*4), canvas.width, canvas.height);
+				c.putImageData(img,0,0)
+			}
+			window.draw = draw
+			let step = 4 / Math.max(WIDTH, HEIGHT)
+			quickset(step * -WIDTH / 2, step * -HEIGHT / 2, step)
+			;(onresize = function(){
+				WIDTH = innerWidth * devicePixelRatio
+				HEIGHT = innerHeight * devicePixelRatio
+				canvas.width = WIDTH
+				canvas.height = HEIGHT
+				draw()
+				transform()
+			})()
+			let justRendered = false, zoomIn = false
+			onmousewheel = function({deltaY}){
+				if(justRendered)return void(justRendered = false)
+				if(get(z) / rz > 0.005 && deltaY >= 0)return
+				let d = 0.99 ** deltaY
+				if(d>1)zoomIn=true
+				rz *= d
+				rx -= mx * (d - 1) / rz
+				ry -= my * (d - 1) / rz
+				pos()
+			}
+			let click = false, mx = 0, my = 0
+			onmousedown = () => click = true
+			onmouseup = () => click = false
+			onmousemove = function({movementX, movementY}){
+				if(click){
+					rx += movementX / rz * devicePixelRatio
+					ry += movementY / rz * devicePixelRatio
+					pos()
+				}
+				mx = event.clientX * devicePixelRatio
+				my = event.clientY * devicePixelRatio
+			}
+			function transform(){
+				canvas.style.transform = `scale(${rz}) translate(${rx/devicePixelRatio}px, ${ry/devicePixelRatio}px)`
+			}
+			function pos(a){
+				let {top, left, bottom, right} = canvas.getBoundingClientRect()
+				if(top > 0 || left > 0 || bottom < innerHeight || right < innerWidth || rz > 2 || a){
+					if(!zoomIn){
+						w._Z8multiplyPjS_(cons(-rx - (WIDTH >> 2)), z.byteOffset)
+						w._Z3addPjS_(x.byteOffset, CONST.byteOffset)
+						w._Z8multiplyPjS_(cons(-ry - (HEIGHT >> 2), CONST2), z.byteOffset)
+						w._Z3addPjS_(y.byteOffset, CONST2.byteOffset)
+						w._Z8multiplyPjS_(z.byteOffset, cons(2 / rz))
+						rx = -(WIDTH >> 3) * rz
+						ry = -(HEIGHT >> 3) * rz
+						rz = 2
+					}else{
+						w._Z8multiplyPjS_(cons(-rx), z.byteOffset)
+						w._Z3addPjS_(x.byteOffset, CONST.byteOffset)
+						w._Z8multiplyPjS_(cons(-ry, CONST2), z.byteOffset)
+						w._Z3addPjS_(y.byteOffset, CONST2.byteOffset)
+						w._Z8multiplyPjS_(z.byteOffset, cons(1 / rz))
+						rz = 1
+						rx = 0
+						ry = 0
+					}
+					zoomIn = false
+					draw()
+					justRendered =  true
+					transform()
+				}
+				transform()
+			}
+		})
+		
+		function quickset(vx, vy, vz){
+			//z should be around 1/200
+			//x and y should be around -2 or smthng idk
+			//assume precision 3
+			x[0] = Math.floor(vx)
+			x[1] = Math.floor(vx * 4294967296)
+			x[2] = 0
+			y[0] = Math.floor(vy)
+			y[1] = Math.floor(vy * 4294967296)
+			y[2] = 0
+			z[0] = Math.floor(vz)
+			z[1] = Math.floor(vz * 4294967296)
+			z[2] = 0
+		}
+	</script>
+</body>
+</html>
