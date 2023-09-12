@@ -305,14 +305,12 @@ vec3 Rainbow(float a){
 	}
 }
 
-vec3 Rainbow2(float a){
-	a = mod(sqrt(a * 5.), 6.);
+vec3 Ocean(float a){
+	a = mod(sqrt(a * 5.), 4.);
 	if(a < 2.){
-		return a < 1. ? vec3(1.,a,0.) : vec3(1.,0.,a-1.);
-	}else if(a < 4.){
-		return a < 3. ? vec3(a-2.,0.,1.) : vec3(0.,a-3.,1.);
+		return a < 1. ? vec3(0.,0.,a/2.) : vec3(0.,a/2.-.5,a/2.);
 	}else{
-		return a < 5. ? vec3(0.,1.,a-4.) : vec3(a-5.,1.,0.);
+		return a < 3. ? vec3(a/2.-1.,1.5-a/2.,1.) : vec3(2.-a/2.,0.,4.-a);
 	}
 }
 
@@ -392,7 +390,7 @@ void main() {
 	}
 }
 
-for(const k of ['Rainbow', 'FiveColor', 'Rainbow2', 'Grayscale', 'Burning']){
+for(const k of ['Rainbow', 'FiveColor', 'Ocean', 'Grayscale', 'Burning']){
 	if(!mode.value) mode.value = k
 	const o = document.createElement('option')
 	o.value = o.textContent = k
@@ -541,7 +539,7 @@ onresize(false)
 function wheel(deltaY){
 	if(justRendered)return void(justRendered = false)
 	let d = 0.99 ** deltaY
-	d = Math.max(d, 2 ** (7+Math.log2(pxrt) - z) / rz)
+	d = Math.max(d, 2 ** (4+Math.log2(pxrt) - z) / rz)
 	if(d>1)zoomIn=true
 	rz *= d
 	rx += mx * (d - 1) / rz
@@ -624,9 +622,6 @@ save.onclick = async () => {
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 	justRendered = true
 	const dt = performance.now() - a
-	info.textContent = dt >= 10000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
-	info.style.setProperty('--c', '#0a0')
-	
 	const c = document.createElement('canvas').getContext('2d')
 	c.canvas.width = WIDTH; c.canvas.height = HEIGHT
 	c.scale(1,-1)
@@ -635,13 +630,15 @@ save.onclick = async () => {
 	c.drawImage(canvas, 0, 0, WIDTH, -HEIGHT)
 	canvas.width = WIDTH >>>= Math.max(0, -supersample.value)
 	canvas.height = HEIGHT >>>= Math.max(0, -supersample.value)
+	info.textContent = dt >= 10000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
+	info.style.setProperty('--c', '#0a0')
 	c.canvas.toBlob(blob => {
 		const a = document.createElement('a')
 		a.href = URL.createObjectURL(blob)
 		a.download = 'fractal'
 		a.click()
+		draw()
 	})
-	draw()
 }
 fs.onclick = () => document.body.requestFullscreen()
 let lock = false
