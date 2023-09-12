@@ -19,6 +19,9 @@ void main(void) { gl_Position = vec4(float(1-((gl_VertexID&1)<<1)), float(1-(gl_
 const program = gl.createProgram()
 gl.attachShader(program, vertexShader)
 let fragmentShader = null
+
+const USE_BLOCK = true
+
 function fractalShader(P){
 	console.time('compile')
 	if(fragmentShader) gl.detachShader(program, fragmentShader)
@@ -85,13 +88,12 @@ precision highp int;
 		mult(a[0], b[_i], c2l, c2r);\\
 		if(a[0] >= 2147483648u)c2l -= b[_i];\\
 		carry2r += c2l;\\
-		if(c2l >= 2147483648u)carry2l--;\\
-		carry2l += uint(carry2r < c2l);\\
+		carry2l += uint(carry2r < c2l) - uint(c2l >= 2147483648u);\\
 		c2l = 0u;\\
 		cr += c2r;\\
 		if(cr < c2r){\\
 			carryr++;\\
-			if(carryr == 0u)carryl++;\\
+			carryl += uint(carryr == 0u);\\
 		}\\
 		a[_i] = cr;\\
 	}\\
@@ -122,28 +124,26 @@ precision highp int;
 		mult(b0, a[_i], c2l, c2r);\\
 		if(b0 >= 2147483648u)c2l -= a[_i];\\
 		carry2r += c2l;\\
-		if(c2l >= 2147483648u)carry2l--;\\
-		if(carry2r < c2l)carry2l++;\\
+		carry2l -= uint(c2l >= 2147483648u);\\
+		carry2l += uint(carry2r < c2l);\\
 		if(_i == 0){ \\
 			c2l = 0u;\\
 			mult(a[0], b0, c2l, c2r);\\
 			if(a[0] >= 2147483648u)c2l -= b0;\\
 			carry2r += c2l;\\
-			if(c2l >= 2147483648u)carry2l--;\\
-			if(carry2r < c2l)carry2l++;\\
+			carry2l += uint(carry2r < c2l) - uint(c2l >= 2147483648u);\\
 		}else if(_i == 1){ \\
 			c2l = 0u;\\
 			mult(a[0], b1, c2l, c2r);\\
 			if(a[0] >= 2147483648u)c2l -= b1;\\
 			carry2r += c2l;\\
-			if(c2l >= 2147483648u)carry2l--;\\
-			if(carry2r < c2l)carry2l++;\\
+			carry2l += uint(carry2r < c2l) - uint(c2l >= 2147483648u);\\
 		} \\
 		c2l = 0u;\\
 		cr += c2r;\\
 		if(cr < c2r){\\
 			carryr++;\\
-			if(carryr == 0u)carryl++;\\
+			carryl += (carryr == 0u);\\
 		}\\
 		a[_i] = cr;\\
 	}\\
@@ -212,9 +212,7 @@ precision highp int;
 	a[1] = uint(mod(b,1.) * 4294967296.); \\
 }
 
-uniform Pos{
-	big x, y;
-};
+${USE_BLOCK?`uniform Pos{ big x, y; };`:`uniform big x, y;`}
 uniform float p_r, p_i;
 uniform uint z;
 uniform uint steps;
@@ -365,19 +363,27 @@ void main() {
 	if (!gl.getProgramParameter(program, gl.LINK_STATUS))
 		throw new Error("Unable to initialize the shader program: " + gl.getProgramInfoLog(program))
 	gl.useProgram(program)
-	const ubo = gl.createBuffer()
-  gl.bindBuffer(gl.UNIFORM_BUFFER, ubo)
-  gl.bufferData(gl.UNIFORM_BUFFER, P*32, gl.DYNAMIC_DRAW)
-	gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
-	gl.uniformBlockBinding(program, gl.getUniformBlockIndex(program, 'Pos'), 0)
-	const arr = new Uint32Array(P*8)
+	let arr
+	if(USE_BLOCK){
+		const ubo = gl.createBuffer()
+		gl.bindBuffer(gl.UNIFORM_BUFFER, ubo)
+		gl.bufferData(gl.UNIFORM_BUFFER, P*32, gl.DYNAMIC_DRAW)
+		gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
+		gl.uniformBlockBinding(program, gl.getUniformBlockIndex(program, 'Pos'), 0)
+		arr = new Uint32Array(P*8)
+	}
 	console.timeEnd('compile')
 	return function(x, y, z, steps = 100, gradient = 15){
-		for(let i = 0; i < P; i++){
-			arr[i<<2] = x[i]
-			arr[i+P<<2] = y[i]
+		if(USE_BLOCK){
+			for(let i = 0; i < P; i++){
+				arr[i<<2] = x[i]
+				arr[i+P<<2] = y[i]
+			}
+			gl.bufferData(gl.UNIFORM_BUFFER, arr, gl.DYNAMIC_DRAW)
+		}else{
+			gl.uniform1uiv(gl.getUniformLocation(program, "x"), x)
+			gl.uniform1uiv(gl.getUniformLocation(program, "y"), y)
 		}
-		gl.bufferData(gl.UNIFORM_BUFFER, arr, gl.DYNAMIC_DRAW)
 		gl.uniform1f(gl.getUniformLocation(program, "p_r"), +r.value)
 		gl.uniform1f(gl.getUniformLocation(program, "p_i"), +i.value)
 		gl.uniform1ui(gl.getUniformLocation(program, "z"), z)
