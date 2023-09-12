@@ -26,7 +26,12 @@ function fractalShader(P){
 precision mediump float;
 precision highp int;
 #define P ${P}
-#define RI(r, i) uint r[P] = x, i[P] = y; \\
+#define big uint[P]
+#define CHECK(tr, ti, L) float _a = float(int(tr[0])) + float(tr[1]) / 4294967296.; \\
+	float _b = float(int(ti[0])) + float(ti[1]) / 4294967296.; \\
+	_a = _a * _a + _b * _b; \\
+	${smooth.checked?'if(_a > 16.*L*L){ return float(j) - (log2(_a)/(4.+2.*log2(L))); }':'if(_a > L*L){ return float(j); }'}
+#define RI(r, i) big r = x, i = y; \\
 	uint _cx = uint(gl_FragCoord.x); \\
 	uint _cy = uint(gl_FragCoord.y); \\
 	uint _c2x = 0u, _c2y = 0u; \\
@@ -43,55 +48,45 @@ precision highp int;
 		_a = i[_zi]; _cy = uint((i[_zi] += _cy) < _a); \\
 	}
 #define mult(a, b, l, r) {\\
-	uint o = (a & 0xFFFFu) * (b & 0xFFFFu);\\
-  uint m1 = (a >> 16) * (b & 0xFFFFu);\\
-  uint m2 = (a & 0xFFFFu) * (b >> 16);\\
-  uint rd = o; l += (m1 >> 16) + (m2 >> 16);\\
-  rd += (m1 << 16);\\
-  l += uint(o > rd);\\
-  o = rd;\\
-  rd += (m2 << 16);\\
-  l += uint(o > rd);\\
-  l += (a >> 16) * (b >> 16);\\
-	r += rd;\\
-	if(r < rd)l++;\\
+	uint _r = a * b; \\
+	uint _x = (a&0xFFFFu)*(b>>16), _y = (a>>16)*(b&0xFFFFu); \\
+	l += (a>>16)*(b>>16)+(_x>>16)+(_y>>16)-uint(int((_r>>16)-(_x&0xFFFFu)-(_y&0xFFFFu))>>16); \\
+	r += _r; \\
+	l += uint(r < _r); \\
 }
 #define multiply(a, b) {\\
 	uint carryl = 0u, carryr = 0u;\\
-	if(P > 1){\\
-		uint cr;\\
-		mult(a[1], b[P - 1], carryr, cr);\\
-		for(int _i = P - 2; _i > 0; _i--){\\
-			uint cl = 0u;\\
-			mult(a[P - _i], b[_i], cl, cr);\\
-			uint _ = 0u; mult(a[P - _i], b[_i + 1], cr, _);\\
-			carryr += cl;\\
-			if(carryr < cl)carryl++;\\
-		}\\
+	uint _;\\
+	mult(a[1], b[P - 1], carryr, _);\\
+	for(int _i = P - 2; _i > 0; _i--){\\
+		uint cl = 0u;\\
+		mult(a[P - _i], b[_i], cl, _);\\
+		carryr += cl;\\
+		carryl += uint(carryr < cl);\\
 	}\\
 	uint carry2l = 0u; uint carry2r = 0u;\\
 	for(int _i = P - 1;_i > 0;_i--){\\
 		uint cr = carryr;\\
 		carryr = carryl; carryl = 0u;\\
-		for(int j = _i - 1; j > 0; j--){\\
+		for(int _j = _i - 1; _j > 0; _j--){\\
 			uint cl = 0u;\\
-			mult(a[j], b[_i - j], cl, cr);\\
+			mult(a[_j], b[_i - _j], cl, cr);\\
 			carryr += cl;\\
-			if(carryr < cl)carryl++;\\
+			carryl += uint(carryr < cl);\\
 		}\\
 		uint c2l = 0u, c2r = carry2r;\\
 		carry2r = carry2l; carry2l = carry2r >= 2147483648u ? -1u : 0u;\\
 		mult(b[0], a[_i], c2l, c2r);\\
 		if(b[0] >= 2147483648u)c2l -= a[_i];\\
 		carry2r += c2l;\\
-		if(c2l >= 2147483648u)carry2l--;\\
-		if(carry2r < c2l)carry2l++;\\
+		carry2l -= uint(c2l >= 2147483648u);\\
+		carry2l += uint(carry2r < c2l);\\
 		c2l = 0u;\\
 		mult(a[0], b[_i], c2l, c2r);\\
 		if(a[0] >= 2147483648u)c2l -= b[_i];\\
 		carry2r += c2l;\\
 		if(c2l >= 2147483648u)carry2l--;\\
-		if(carry2r < c2l)carry2l++;\\
+		carry2l += uint(carry2r < c2l);\\
 		c2l = 0u;\\
 		cr += c2r;\\
 		if(cr < c2r){\\
@@ -102,6 +97,59 @@ precision highp int;
 	}\\
 	a[0] = a[0] * b[0] + carryr + carry2r;\\
 }
+
+#define multiplyc(a, b) {\\
+	uint carryl = 0u, carryr = 0u;\\
+	uint b0 = uint(int(floor(b))), b1 = uint(mod(b,1.) * 4294967296.); \\
+	uint _; \\
+	mult(a[P-1], b1, carryr, _);\\
+	uint carry2l = 0u; uint carry2r = 0u;\\
+	for(int _i = P - 1;_i > 0;_i--){\\
+		uint cr = carryr;\\
+		carryr = carryl;\\
+		{ \\
+			uint cl = 0u;\\
+			mult(a[_i-1], b1, cl, cr);\\
+			carryr += cl;\\
+			carryl = uint(carryr < cl);\\
+			cl = 0u;\\
+			mult(a[_i], b0, cl, cr);\\
+			carryr += cl;\\
+			carryl += uint(carryr < cl);\\
+		} \\
+		uint c2l = 0u, c2r = carry2r;\\
+		carry2r = carry2l; carry2l = carry2r >= 2147483648u ? -1u : 0u;\\
+		mult(b0, a[_i], c2l, c2r);\\
+		if(b0 >= 2147483648u)c2l -= a[_i];\\
+		carry2r += c2l;\\
+		if(c2l >= 2147483648u)carry2l--;\\
+		if(carry2r < c2l)carry2l++;\\
+		if(_i == 0){ \\
+			c2l = 0u;\\
+			mult(a[0], b0, c2l, c2r);\\
+			if(a[0] >= 2147483648u)c2l -= b0;\\
+			carry2r += c2l;\\
+			if(c2l >= 2147483648u)carry2l--;\\
+			if(carry2r < c2l)carry2l++;\\
+		}else if(_i == 1){ \\
+			c2l = 0u;\\
+			mult(a[0], b1, c2l, c2r);\\
+			if(a[0] >= 2147483648u)c2l -= b1;\\
+			carry2r += c2l;\\
+			if(c2l >= 2147483648u)carry2l--;\\
+			if(carry2r < c2l)carry2l++;\\
+		} \\
+		c2l = 0u;\\
+		cr += c2r;\\
+		if(cr < c2r){\\
+			carryr++;\\
+			if(carryr == 0u)carryl++;\\
+		}\\
+		a[_i] = cr;\\
+	}\\
+	a[0] = a[0] * b0 + carryr + carry2r;\\
+}
+
 #define add(a, b) {\\
 	bool _carry = false;\\
 	for(int _i = P - 1;_i > 0;_i--){\\
@@ -110,13 +158,34 @@ precision highp int;
 	}\\
 	a[0] += b[0] + uint(_carry);\\
 }
-#define dbl(a) {\\
+#define addw(a, b, w) {\\
 	bool _carry = false;\\
-	for(int _i = P - 1;_i >= 0;_i--){\\
-		bool _carry2 = a[_i] >= 2147483648u;\\
-		a[_i] = (a[_i] << 1) + uint(_carry);\\
-		_carry = _carry2;\\
+	uint _h, _l; \\
+	mult(b[P-1], w, _h, _l); \\
+	for(int _i = P - 1;_i > 1;_i--){\\
+		a[_i] += _h; \\
+		_carry = _carry ? a[_i] <= _h : a[_i] < _h;\\
+		mult(b[_i-1], w, _h, _l); \\
+		a[_i] += _l + uint(_carry);\\
+		_carry = _carry ? a[_i] <= _l : a[_i] < _l;\\
 	}\\
+	a[1] += _h; \\
+	_carry = _carry ? a[1] <= _h : a[1] < _h;\\
+	mult(b[0], w, _h, _l); \\
+	_h = uint(int(_h << 16) >> 16); \\
+	a[1] += _l + uint(_carry);\\
+	_carry = _carry ? a[1] <= _l : a[1] < _l;\\
+	a[0] += _h + uint(_carry);\\
+}
+#define addc(a, b) {\\
+	uint _c = uint(mod(b,1.) * 4294967296.); \\
+	a[1] += _c; \\
+	a[0] += uint(int(floor(b))) + uint((a[1] < _c)); \\
+}
+#define dbl(a) {\\
+	for(int _i = 0; _i < P - 1; _i++) \\
+		a[_i] = (a[_i] << 1) | (a[_i + 1] >> 31); \\
+	a[P-1] <<= 1; \\
 }
 #define take(a, b) {\\
 	bool _carry = false;\\
@@ -138,29 +207,30 @@ precision highp int;
 		}\\
 	};\\
 }
+#define cons(a, b) {\\
+	a[0] = uint(int(floor(b))); \\
+	a[1] = uint(mod(b,1.) * 4294967296.); \\
+}
+
 uniform Pos{
-	uint x[P], y[P];
+	big x, y;
 };
+uniform float p_r, p_i;
 uniform uint z;
 uniform uint steps;
 uniform float gradient;
 out vec4 fragColor;
-float mandelbrot(){
+
+float Mandelbrot(){
 	RI(r, i);
-	uint tr[P] = r; uint ti[P] = i; uint t[P];
+	big tr, ti, t;
+	cons(tr, p_r); cons(ti, p_i);
 	for(uint j = 0u;j < steps; j++){
-		float a = float(int(tr[0])) + float(tr[1]) / 4294967296.;
-		float b = float(int(ti[0])) + float(ti[1]) / 4294967296.;
-		a = a * a + b * b;
-		if(a > 64.){ return float(j) - (log2(a)/6.); }
+		CHECK(tr, ti, 2.);
 		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
-		for(int i = 0; i < P - 1; i++){
-			t[i] = ti[i];
-			ti[i] = (ti[i] << 1) | (ti[i + 1] >> 31);
-		}
-		t[P-1] = ti[P-1]; ti[P-1] <<= 1;
+		t = ti;
+		dbl(ti);
 		multiply(ti, tr);
-		//absolute(ti);
 		take(tr, t);
 		dbl(t);
 		add(t, tr);
@@ -170,6 +240,46 @@ float mandelbrot(){
 	}
 	return -999999.;
 }
+float Julia(){
+	RI(r, i);
+	big tr = r, ti = i, t;
+	for(uint j = 0u;j < steps; j++){
+		CHECK(tr, ti, 2.);
+		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
+		t = ti;
+		dbl(ti);
+		multiply(ti, tr);
+		take(tr, t);
+		dbl(t);
+		add(t, tr);
+		multiply(tr, t);
+		addc(tr, p_r);
+		addc(ti, p_i);
+	}
+	return -999999.;
+}
+
+float BurningShip(){
+	RI(r, i);
+	big tr, ti, t;
+	cons(tr, p_r); cons(ti, p_i);
+	for(uint j = 0u;j < steps; j++){
+		CHECK(tr, ti, 2.);
+		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
+		t = ti;
+		dbl(ti);
+		multiply(ti, tr);
+		absolute(ti);
+		take(tr, t);
+		dbl(t);
+		add(t, tr);
+		multiply(tr, t);
+		add(tr, r);
+		add(ti, i);
+	}
+	return -999999.;
+}
+
 /*int mandelbrot_old(float r, float i){
 	float tr = r; float ti = i; float t;
 	for(int j = 0;j < 100; j++){
@@ -223,8 +333,29 @@ vec3 Burning(float a){
 	return vec3(a+b,a+b*b,a);
 }
 
+vec3 FiveColor(float a){
+	a = mod(sqrt(a * 12.), 12.);
+	if(a >= 6.){
+		if(a >= 10.){
+			return a >= 11. ? vec3(1.,12.-a,12.-a) : vec3(1.,a-10.,1.);
+		}else if(a > 8.){
+			return a >= 9. ? vec3(a-9.,0.,a-9.) : vec3(0.,0.,9.-a);
+		}else{
+			return a >= 7. ? vec3(8.-a,8.-a,1.) : vec3(a-6.,1.,1.);
+		}
+	}else{
+		if(a >= 4.){
+			return a >= 5. ? vec3(0.,a-5.,a-5.) : vec3(0.,5.-a,0.);
+		}else if(a > 2.){
+			return a >= 3. ? vec3(4.-a,1.,4.-a) : vec3(1.,1.,a-2.);
+		}else{
+			return a >= 1. ? vec3(a-1.,a-1.,0.) : vec3(1.-a,0.,0.);
+		}
+	}
+}
+
 void main() {
-	float a = mandelbrot();
+	float a = ${fractal.value}();
 	fragColor.w = 1.;
 	if(a == -999999.) discard;
 	fragColor.xyz = ${mode.value}(a / gradient);
@@ -247,63 +378,25 @@ void main() {
 			arr[i+P<<2] = y[i]
 		}
 		gl.bufferData(gl.UNIFORM_BUFFER, arr, gl.DYNAMIC_DRAW)
+		gl.uniform1f(gl.getUniformLocation(program, "p_r"), +r.value)
+		gl.uniform1f(gl.getUniformLocation(program, "p_i"), +i.value)
 		gl.uniform1ui(gl.getUniformLocation(program, "z"), z)
 		gl.uniform1ui(gl.getUniformLocation(program, "steps"), steps)
 		gl.uniform1f(gl.getUniformLocation(program, "gradient"), gradient)
 	}
 }
 
-for(const k of ['Rainbow', 'Rainbow2', 'Grayscale', 'Burning']){
+for(const k of ['Rainbow', 'FiveColor', 'Rainbow2', 'Grayscale', 'Burning']){
 	if(!mode.value) mode.value = k
 	const o = document.createElement('option')
 	o.value = o.textContent = k
 	mode.append(o)
 }
-
-let l = 0
-function mult(a, b){
-	let o=(a&0xFFFF)*(b&0xFFFF);let m1=(a>>16)*(b&0xFFFF),m2=(a&0xFFFF)*(b>>16),rd=o;l=(m1>>16)+(m2>>16)|0;rd=rd+(m1<<16)|0;l=l+(o>rd)|0;o=rd;rd=rd+(m2<<16)|0;l=l+(o>rd)|0;l=l+(a>>16)*(b>>16)|0;r=r+rd|0;if(r<rd)l=l+1|0;return r
-}
-function multiply(a, b){
-	let carryl = 0, carryr = 0
-	if(P > 1){
-		let cr = mult(a[1], b[P - 1]);carryr = l
-		for(let i = P - 2; i > 0; i--){
-			cr += mult(a[P - i], b[i + 1])
-			cr += mult(a[P - i], b[i])
-			carryr += l
-			if(carryr < l)carryl++
-		}
-	}
-	let carry2l = 0, carry2r = 0
-	for(let i = P - 1;i > 0;i--){
-		let cr = carryr
-		carryr = carryl; carryl = 0
-		for(let j = i - 1; j > 0; j--){
-			cr = mult(a[j], b[i - j])
-			carryr += l
-			if(carryr < l)carryl++
-		}
-		let c2r = carry2r
-		carry2r = carry2l; carry2l = carry2r >> 31
-		c2r = mult(b[0], a[i])
-		if(b[0] < 0)l -= a[i]
-		carry2r += l
-		if(l < 0)carry2l--
-		if(carry2r < l)carry2l++
-		c2r = mult(a[0], b[i])
-		if(a[0] < 0)l -= b[i]
-		carry2r += l
-		if(l < 0)carry2l--
-		if(carry2r < l)carry2l++
-		cr += c2r
-		if(cr < c2r){
-			carryr++;
-			if(carryr == 0)carryl++;
-		}
-		a[i] = cr;
-	}
-	a[0] = a[0] * b[0] + carryr + carry2r;
+for(const k of ['Mandelbrot', 'BurningShip', 'Julia']){
+	if(!fractal.value) fractal.value = k
+	const o = document.createElement('option')
+	o.value = o.textContent = k
+	fractal.append(o)
 }
 function add(a, b) {
 	let carry = false
@@ -346,9 +439,9 @@ async function draw(){
 	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	const a = performance.now()
 	info.style.setProperty('--c', 'red')
-	if(z>P*32-36) setprecision(P+1)
-	else if(z<(P-4)*32)setprecision(P-2)
-	shader(x, y, z, z*2**slider.value, gradient.value)
+	if(z>P*32-36 && !lock) setprecision(P+1)
+	else if(z<(P-4)*32 && !lock)setprecision(P-2)
+	shader(x, y, z, z*2**slider.value, gradient.value**2)
 	await pr
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 	c2.drawImage(canvas,0,0,1,1,0,0,1,1)
@@ -461,13 +554,14 @@ onmousemove = function({clientX, clientY}){
 	my = clientY * pxrt
 }
 function arrToNum(x){
-	let n = 10000000000n ** BigInt(P - 1)
+	let n = 10000000000n ** BigInt(P)
 	let xr = BigInt(x[0]|0)*n
 	n /= 4294967296n // Round towards zero, `>> 32` would round down
 	for(let i = 1; i < P; i++){
 		xr += BigInt(x[i]) * n
 		n /= 4294967296n
 	}
+	xr = xr/10000000000n+1n
 	const total = (P - 1) * 10, wasted = total - Math.floor(z / Math.log2(10) + 1)
 	const xf = (xr+'').replace('-', '').padStart(total+1, '0')
 	return (xr < 0 ? '-' : '') + xf.slice(0, -total) + '.' + xf.slice(-total, wasted?-wasted:undefined)
@@ -505,25 +599,49 @@ auto.onclick = () => {
 }
 
 save.onclick = async () => {
+	const pr = event ? new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))) : new Promise(requestAnimationFrame)
+	//Clear buffer (optional)
+	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+	const a = performance.now()
+	info.style.setProperty('--c', 'red')
 	rx -= WIDTH/4 * (rz-1)
 	ry -= WIDTH/4 * (rz-1)
 	add(x, shr(rx, z))
 	add(y, shr(ry, z))
 	rz = 1
 	rx = ry = 0
-	await draw()
+	canvas.width = WIDTH <<= Math.max(0, -supersample.value)
+	canvas.height = HEIGHT <<= Math.max(0, -supersample.value)
+	shader(x, y, z-supersample.value, z*2**slider.value, gradient.value**2)
+	gl.viewport(0, 0, canvas.width, canvas.height)
+	await pr
+	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+	justRendered = true
+	const dt = performance.now() - a
+	info.textContent = dt >= 10000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
+	info.style.setProperty('--c', '#0a0')
+	
 	const c = document.createElement('canvas').getContext('2d')
 	c.canvas.width = WIDTH; c.canvas.height = HEIGHT
 	c.scale(1,-1)
+	c.fillStyle = getComputedStyle(canvas).backgroundColor
+	c.fillRect(0,0,WIDTH,-HEIGHT)
 	c.drawImage(canvas, 0, 0, WIDTH, -HEIGHT)
+	canvas.width = WIDTH >>>= Math.max(0, -supersample.value)
+	canvas.height = HEIGHT >>>= Math.max(0, -supersample.value)
 	c.canvas.toBlob(blob => {
 		const a = document.createElement('a')
 		a.href = URL.createObjectURL(blob)
 		a.download = 'fractal'
 		a.click()
 	})
+	draw()
 }
 fs.onclick = () => document.body.requestFullscreen()
+let lock = false
+lp.onclick = () => {
+	lp.style.border = (lock = !lock) ? '2px white solid' : ''
+}
 
 onkeyup = e => {const p = keypresses[e.key];p&&(e.preventDefault(),p(e))}
 onkeydown = e => {keypresses[e.key]&&e.preventDefault()}

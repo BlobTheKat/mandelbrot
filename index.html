@@ -11,10 +11,16 @@
 		<input type="range" min="0" max="20" value="4" id="slider" onchange="draw()" />
 		<div id="info" style="--c: #0a0"></div>
 		<div id="save">save image</div> <div id="fs">fullscreen</div>
+		<div id="lp">lock precision</div>
 		<div id="auto">auto</div>
 		<input type="range" id="supersample" min="-4" max="1" value="0" onchange="const gain = this.value-Math.log2(pxrt/devicePixelRatio);z+=gain;rx*=2**gain;ry*=2**gain;pxrt=2**this.value*devicePixelRatio;window.onresize(true)" />
-		<input type="range" id="gradient" min="10" value="100" max="510" onchange="draw()" />
-		<select id="mode" onchange="setprecision();draw()">
+		<input type="range" id="gradient" min="1" value="10" max="25" onchange="draw()" />
+		<input type="checkbox" id="smooth" checked onchange="setprecision();draw()" />
+		<select id="mode" onchange="setprecision();draw()"></select>
+		<select id="fractal" onchange="setprecision();draw()"></select>
+		<input type="checkbox" id="live" />
+		<input type="range" id="r" min="-2" value="0" max="2" step="0.001" data-v="0.000" oninput="{let v = +this.value; if(v>-0.03&&v<0.03)this.value=v=0;this.dataset.v=v.toFixed(3);if(live.checked)draw()}" onchange="draw()" />
+		<input type="range" id="i" min="-2" value="0" max="2" step="0.001" data-v="0.000" oninput="{let v = +this.value; if(v>-0.03&&v<0.03)this.value=v=0;this.dataset.v=v.toFixed(3);if(live.checked)draw()}" onchange="draw()" />
 		</select>
   </body>
 	<style>
@@ -28,6 +34,7 @@
 			image-rendering: pixelated;
 			transform-origin: bottom left;
 			z-index: 0;
+			background: #000;
 		}
 		body{
 			display: flex;
@@ -35,7 +42,7 @@
 			justify-content: center;
 			align-items: center;
 			margin: 0;
-			background: #000;
+			background: #444;
 			font-family: monospace;
 			color: white;
 		}
@@ -61,7 +68,7 @@
 			width: 300px;
 			margin: 0; padding: 0;
 		}
-		#auto, #save, #fs{
+		#auto, #save, #fs, #lp{
 			position: absolute;
 			bottom: 30px;
 			right: 10px;
@@ -77,15 +84,20 @@
 			justify-content: center;
 			box-sizing: border-box;
 		}
-		#save, #fs{
+		#save, #fs, #lp{
 			bottom: unset;
 			right: unset;
 			top: 80px;
 			left: 5px;
 			width: 100px;
+			user-select: none;
+			-webkit-user-select: none;
 		}
 		#fs{
 			left: 110px;
+		}
+		#lp{
+			top: 110px; width: 140px;
 		}
 		#info, #supersample{
 			position: absolute;
@@ -111,15 +123,55 @@
 			position: absolute;
 			bottom: 10px;
 			left: 10px;
-			width: 200px;
+			width: 230px;
 			margin: 0; padding: 0;
 		}
-		#mode{
+		#smooth{
+			position: absolute;
+			margin: 0; padding: 0;
+			bottom: 35px;
+			left: 219px;
+			cursor: pointer;
+			height: 19px; width: 19px;
+		}
+		#mode, #fractal{
 			outline: none;
 			bottom: 35px;
 			border-color: #8888;
     	border-radius: 100px;
+			width: 200px;
 		}
+		#fractal{
+			position: absolute;
+			bottom: unset;
+			width: 200px;
+			top: 10px; right: 10px;
+			margin: 0;
+		}
+		#r, #i, #live{
+			position: absolute;
+			top: 35px;
+			right: 10px;
+			width: 200px;
+			margin: 0; padding: 0;
+		}
+		#live{
+			top: 10px;
+			right: 220px;
+			height: 19px;
+			width: 19px;
+		}
+		#r:before, #i:before{
+			position: absolute; content: 'r = ' attr(data-v);
+			font-family: monospace;
+			color: white;
+			text-shadow: 0 0 5px black;
+			right: 100%;
+			padding-right: 10px;
+			white-space: pre;
+		}
+		#i:before{ content: 'i = ' attr(data-v) }
+		#i{ top: 55px }
 		#info:after{
 			content: '';
 			background: var(--c);
