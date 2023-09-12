@@ -642,6 +642,12 @@ let lock = false
 lp.onclick = () => {
 	lp.style.border = (lock = !lock) ? '2px white solid' : ''
 }
+ip.onclick = () => {
+	lp.style.border = '2px white solid'
+	lock = true
+	setprecision(P+1)
+	draw()
+}
 
 onkeyup = e => {const p = keypresses[e.key];p&&(e.preventDefault(),p(e))}
 onkeydown = e => {keypresses[e.key]&&e.preventDefault()}
