@@ -30,7 +30,8 @@ precision mediump float;
 precision highp int;
 #define P ${P}
 #define big uint[P]
-#define CHECK(tr, ti, L) float _a = float(int(tr[0])) + float(tr[1]) / 4294967296.; \\
+#define CHECK(tr, ti, L) \\
+	float _a = float(int(tr[0])) + float(tr[1]) / 4294967296.; \\
 	float _b = float(int(ti[0])) + float(ti[1]) / 4294967296.; \\
 	_a = _a * _a + _b * _b; \\
 	${smooth.checked?'if(_a > 16.*L*L){ return float(j) - (log2(_a)/(4.+2.*log2(L))); }':'if(_a > L*L){ return float(j); }'}
@@ -82,8 +83,7 @@ precision highp int;
 		mult(b[0], a[_i], c2l, c2r);\\
 		if(b[0] >= 2147483648u)c2l -= a[_i];\\
 		carry2r += c2l;\\
-		carry2l -= uint(c2l >= 2147483648u);\\
-		carry2l += uint(carry2r < c2l);\\
+		carry2l += uint(carry2r < c2l) - uint(c2l >= 2147483648u);\\
 		c2l = 0u;\\
 		mult(a[0], b[_i], c2l, c2r);\\
 		if(a[0] >= 2147483648u)c2l -= b[_i];\\
@@ -221,8 +221,8 @@ out vec4 fragColor;
 
 float Mandelbrot(){
 	RI(r, i);
-	big tr, ti, t;
-	cons(tr, p_r); cons(ti, p_i);
+	big tr = r, ti = i, t;
+	addc(tr, p_r); addc(ti, p_i);
 	for(uint j = 0u;j < steps; j++){
 		CHECK(tr, ti, 2.);
 		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
@@ -272,8 +272,29 @@ float BurningShip(){
 		dbl(t);
 		add(t, tr);
 		multiply(tr, t);
+		absolute(tr);
 		add(tr, r);
 		add(ti, i);
+	}
+	return -999999.;
+}
+
+float BurningJulia(){
+	RI(r, i);
+	big tr = r, ti = i, t;
+	for(uint j = 0u;j < steps; j++){
+		CHECK(tr, ti, 2.);
+		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
+		t = ti;
+		dbl(ti);
+		multiply(ti, tr);
+		absolute(ti);
+		take(tr, t);
+		dbl(t);
+		add(t, tr);
+		multiply(tr, t);
+		addc(tr, p_r);
+		addc(ti, p_i);
 	}
 	return -999999.;
 }
@@ -315,12 +336,12 @@ vec3 Ocean(float a){
 }
 
 vec3 Grayscale(float a){
-	a = mod(sqrt(a * 2.), 2.); if(a > 1.) a = 2. - a;
+	a = mod(sqrt(a * 5.), 2.); if(a > 1.) a = 2. - a;
 	return vec3(a);
 }
 
 vec3 Burning(float a){
-	a = mod(sqrt(a * 3.), 3.);
+	a = mod(sqrt(a * 5.), 3.);
 	float b = 0.;
 	if(a > 2.){
 		b = 1. - abs(a * -2. + 5.);
@@ -330,11 +351,11 @@ vec3 Burning(float a){
 }
 
 vec3 FiveColor(float a){
-	a = mod(sqrt(a * 12.), 12.);
+	a = mod(sqrt(a * 5.), 12.);
 	if(a >= 6.){
 		if(a >= 10.){
 			return a >= 11. ? vec3(1.,12.-a,12.-a) : vec3(1.,a-10.,1.);
-		}else if(a > 8.){
+		}else if(a >= 8.){
 			return a >= 9. ? vec3(a-9.,0.,a-9.) : vec3(0.,0.,9.-a);
 		}else{
 			return a >= 7. ? vec3(8.-a,8.-a,1.) : vec3(a-6.,1.,1.);
@@ -342,7 +363,7 @@ vec3 FiveColor(float a){
 	}else{
 		if(a >= 4.){
 			return a >= 5. ? vec3(0.,a-5.,a-5.) : vec3(0.,5.-a,0.);
-		}else if(a > 2.){
+		}else if(a >= 2.){
 			return a >= 3. ? vec3(4.-a,1.,4.-a) : vec3(1.,1.,a-2.);
 		}else{
 			return a >= 1. ? vec3(a-1.,a-1.,0.) : vec3(1.-a,0.,0.);
@@ -354,7 +375,7 @@ void main() {
 	float a = ${fractal.value}();
 	fragColor.w = 1.;
 	if(a == -999999.) discard;
-	fragColor.xyz = ${mode.value}(a / gradient);
+	fragColor.xyz = ${mode.value}(max(0., a / gradient));
 }`)
 	gl.attachShader(program, fragmentShader)
 	gl.linkProgram(program)
@@ -396,7 +417,7 @@ for(const k of ['Rainbow', 'FiveColor', 'Ocean', 'Grayscale', 'Burning']){
 	o.value = o.textContent = k
 	mode.append(o)
 }
-for(const k of ['Mandelbrot', 'BurningShip', 'Julia']){
+for(const k of ['Mandelbrot', 'BurningShip', 'Julia', 'BurningJulia']){
 	if(!fractal.value) fractal.value = k
 	const o = document.createElement('option')
 	o.value = o.textContent = k
@@ -547,7 +568,7 @@ function wheel(deltaY){
 	pos()
 }
 onmousedown = ({target}) => void(click = target == canvas)
-onmouseup = () => click = false
+onmouseup = () => void(click = false)
 onmousemove = function({clientX, clientY}){
 	if(click){
 		rx -= (clientX * pxrt - mx) / rz
@@ -578,7 +599,7 @@ function getStats(){
 	add(a, y)
 	const yStr = arrToNum(a)
 	const exp = (z - 9) / Math.log2(10) + Math.log10(rz)
-	return `r: ${xStr}\ni: ${yStr}\nzoom: ${(10**((exp%1+1)%1)).toFixed(2)}x10^${Math.floor(exp)}\nprecision: ${P*32} bits`
+	return `r: ${xStr}\ni: ${yStr}\nzoom: ${(10**((exp%1+1)%1)).toFixed(2)}x10^${Math.floor(exp)}\nprecision: ${P*32} bits\nG: ${gradient.value**2}, iter: ${z*2**slider.value}`
 }
 stats.onclick = () => navigator.clipboard.writeText(getStats())
 

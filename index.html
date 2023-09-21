@@ -16,7 +16,7 @@
 		<div id="lp">lock precision</div> <div id="ip">inc precision</div>
 		<div id="auto">auto</div>
 		<input type="range" id="supersample" min="-4" max="1" value="0" onchange="const gain = this.value-Math.log2(pxrt/devicePixelRatio);z+=gain;rx*=2**gain;ry*=2**gain;pxrt=2**this.value*devicePixelRatio;window.onresize(true)" />
-		<input type="range" id="gradient" min="1" value="10" max="25" step="0.01" oninput="if(live.checked)draw()" onchange="draw()" />
+		<input type="range" id="gradient" min="1" value="10" max="40" step="0.01" oninput="if(live.checked)draw()" onchange="draw()" />
 		<input type="checkbox" id="smooth" checked onchange="setprecision();draw()" />
 		<select id="mode" onchange="setprecision();draw()"></select>
 		<select id="fractal" onchange="setprecision();draw()"></select>
@@ -91,7 +91,7 @@
 		#save, #fs, #lp, #ip{
 			bottom: unset;
 			right: unset;
-			top: 80px;
+			top: 96px;
 			left: 5px;
 			width: 100px;
 			user-select: none;
@@ -101,10 +101,10 @@
 			left: 110px;
 		}
 		#lp{
-			top: 110px; width: 140px;
+			top: 126px; width: 140px;
 		}
 		#ip{
-			top: 110px; width: 130px; left: 150px;
+			top: 126px; width: 130px; left: 150px;
 		}
 		#info, #supersample{
 			position: absolute;
