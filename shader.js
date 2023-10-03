@@ -272,7 +272,6 @@ float BurningShip(){
 		dbl(t);
 		add(t, tr);
 		multiply(tr, t);
-		absolute(tr);
 		add(tr, r);
 		add(ti, i);
 	}
