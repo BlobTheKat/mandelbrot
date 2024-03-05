@@ -1,5 +1,5 @@
-const gl = canvas.getContext("webgl2")
-if (!gl) throw 'Unable to initialize WebGL. Your browser or machine may not support it.'
+const gl = canvas.getContext('webgl2', {depth: false, alpha: false})
+if (!gl) throw "WebGLn't"
 gl.disable(gl.DEPTH_TEST) // No 3d
 
 function makeShader(type, source) {
@@ -458,7 +458,7 @@ function setprecision(l = P){
 }
 const c2 = document.createElement('canvas').getContext('2d', {willReadFrequently: true})
 async function draw(){
-	const pr = event ? new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))) : new Promise(requestAnimationFrame)
+	const pr = window.event ? new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))) : new Promise(requestAnimationFrame)
 	//Clear buffer (optional)
 	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	const a = performance.now()
@@ -471,16 +471,17 @@ async function draw(){
 	c2.drawImage(canvas,0,0,1,1,0,0,1,1)
 	c2.getImageData(0,0,1,1).data
 	transform()
-	justRendered = true
+	rendering = true
 	const dt = performance.now() - a
 	info.textContent = dt >= 10000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
 	info.style.setProperty('--c', '#0a0')
+	requestAnimationFrame(() => rendering = false)
 }
 function transform(){
 	canvas.style.transform = `scaleY(-1) translateY(${innerHeight}px) scale(${rz}) translate(${-rx/pxrt}px, ${ry/pxrt}px)`
 	stats.textContent = getStats()
 }
-let justRendered = false, zoomIn = false
+let rendering = false, zoomIn = false
 function cons(v, i, c = t){
 	if(P > i)c[i] = Math.floor(v)
 	if(P > i + 1)c[i + 1] = Math.floor(v * 4294967296)
@@ -489,6 +490,7 @@ function cons(v, i, c = t){
 	return c
 }
 function pos(a = false){
+	transform()
 	let {top, left, bottom, right} = canvas.getBoundingClientRect()
 	if(top > 0 || left > 0 || bottom < innerHeight || right < innerWidth || (zoomIn && rz >= 2) || a){
 		if(rz > 2){
@@ -535,7 +537,7 @@ function pos(a = false){
 		}*/
 		zoomIn = false
 		draw()
-	}else transform()
+	}
 }
 let click = false, mx = 0, my = 0
 let pxrt = devicePixelRatio
@@ -557,8 +559,8 @@ setprecision(P)
 onresize(false)
 
 function wheel(deltaY){
-	if(justRendered)return void(justRendered = false)
-	let d = 0.99 ** deltaY
+	if(rendering)return
+	let d = Math.max(0.5, Math.min(2, 0.99 ** deltaY))
 	d = Math.max(d, 2 ** (4+Math.log2(pxrt) - z) / rz)
 	if(d>1)zoomIn=true
 	rz *= d
@@ -640,7 +642,7 @@ save.onclick = async () => {
 	gl.viewport(0, 0, canvas.width, canvas.height)
 	await pr
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
-	justRendered = true
+	rendering = true
 	const dt = performance.now() - a
 	const c = document.createElement('canvas').getContext('2d')
 	c.canvas.width = WIDTH; c.canvas.height = HEIGHT
