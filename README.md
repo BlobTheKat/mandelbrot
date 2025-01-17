@@ -1,0 +1,1 @@
+https://mandelbrot-bgn.pages.dev/
