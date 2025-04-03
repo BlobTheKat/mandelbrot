@@ -26,8 +26,9 @@ function fractalShader(P){
 	console.time('compile')
 	if(fragmentShader) gl.detachShader(program, fragmentShader)
 	fragmentShader = makeShader(gl.FRAGMENT_SHADER, `#version 300 es
-precision mediump float;
+precision hgihp float;
 precision highp int;
+precision highp uint;
 #define P ${P}
 #define big uint[P]
 #define CHECK(tr, ti, L) \\
