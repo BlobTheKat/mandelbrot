@@ -11,12 +11,12 @@
     <canvas id="canvas" width="1024" height="1024"></canvas>
 		<div title="click to copy coords" id="stats"></div>
 		<input type="range" min="0" max="20" value="4" id="slider" onchange="draw()" />
-		<div id="info" style="--c: #0a0"></div>
+		<div id="info"></div>
 		<div id="save">save image</div> <div id="fs">fullscreen</div>
 		<div id="lp">lock precision</div> <div id="ip">inc precision</div>
 		<div id="auto">auto</div>
-		<input type="range" id="supersample" min="-4" max="1" value="0" onchange="const gain = this.value-Math.log2(pxrt/devicePixelRatio);z+=gain;rx*=2**gain;ry*=2**gain;pxrt=2**this.value*devicePixelRatio;window.onresize(true)" />
-		<input type="range" id="gradient" min="1" value="10" max="40" step="0.01" oninput="if(live.checked)draw()" onchange="draw()" />
+		<input type="range" id="supersample" min="-4" max="1" value="0" onchange="const gain = this.value-Math.log2(pxrt/devicePixelRatio);z+=gain;rx*=2**gain;ry*=2**gain;pxrt=2**this.value*devicePixelRatio;window.onresize(event)" />
+		<input type="range" id="gradient" min="-5" value="2" max="10" step="0.01" oninput="if(live.checked)draw()" onchange="draw()" />
 		<input type="checkbox" id="smooth" checked onchange="setprecision();draw()" />
 		<select id="mode" onchange="setprecision();draw()"></select>
 		<select id="fractal" onchange="setprecision();draw()"></select>
@@ -179,13 +179,5 @@
 		}
 		#i:before{ content: 'i = ' attr(data-v) }
 		#i{ top: 55px }
-		#info:after{
-			content: '';
-			background: var(--c);
-			height: 16px; width: 16px;
-			border: #fff 2px solid;
-			margin-top: 2px;
-			border-radius: 100%;
-		}
 	</style>
 </html>

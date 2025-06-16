@@ -1,12 +1,12 @@
 const gl = canvas.getContext('webgl2', {depth: false, alpha: false})
 if (!gl) throw "WebGLn't"
 gl.disable(gl.DEPTH_TEST) // No 3d
+gl.disable(gl.CULL_FACE)
 
 function makeShader(type, source) {
 	const shader = gl.createShader(type)
 	gl.shaderSource(shader, source)
 	gl.compileShader(shader)
-
 	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
 		const info = gl.getShaderInfoLog(shader)
 		gl.deleteShader(shader)
@@ -26,31 +26,16 @@ function fractalShader(P){
 	console.time('compile')
 	if(fragmentShader) gl.detachShader(program, fragmentShader)
 	fragmentShader = makeShader(gl.FRAGMENT_SHADER, `#version 300 es
+#line 29
 precision highp float;
 precision highp int;
 #define P ${P}
 #define big uint[P]
-#define CHECK(tr, ti, L) \\
+#define CHECK(tr, ti, L) {\\
 	float _a = float(int(tr[0])) + float(tr[1]) / 4294967296.; \\
 	float _b = float(int(ti[0])) + float(ti[1]) / 4294967296.; \\
 	_a = _a * _a + _b * _b; \\
-	${smooth.checked?'if(_a > 16.*L*L){ return float(j) - (log2(_a)/(4.+2.*log2(L))); }':'if(_a > L*L){ return float(j); }'}
-#define RI(r, i) big r = x, i = y; \\
-	uint _cx = uint(gl_FragCoord.x); \\
-	uint _cy = uint(gl_FragCoord.y); \\
-	uint _c2x = 0u, _c2y = 0u; \\
-	uint _a = z & 31u, _zi = (z >> 5u); \\
-	if(_a != 0u){ \\
-		_c2x = _cx >> _a; _c2y = _cy >> _a; \\
-		_cx <<= 32u - _a; _cy <<= 32u - _a; \\
-		_zi++; \\
-	} \\
-	_a = r[_zi]; _cx = _c2x + uint((r[_zi] += _cx) < _a); \\
-	_a = i[_zi]; _cy = _c2y + uint((i[_zi] += _cy) < _a); \\
-	while(_zi-- > 0u && (_cx > 0u || _cy > 0u)){ \\
-		_a = r[_zi]; _cx = uint((r[_zi] += _cx) < _a); \\
-		_a = i[_zi]; _cy = uint((i[_zi] += _cy) < _a); \\
-	}
+	${smooth.checked?'if(_a > 16.*L*L){ return float(j) - (log2(_a)/(4.+2.*log2(L))); }':'if(_a > L*L){ return float(j); }'}}
 #define mult(a, b, l, r) {\\
 	uint _r = a * b; \\
 	uint _x = (a&0xFFFFu)*(b>>16), _y = (a>>16)*(b&0xFFFFu); \\
@@ -68,7 +53,7 @@ precision highp int;
 		carryr += cl;\\
 		carryl += uint(carryr < cl);\\
 	}\\
-	uint carry2l = 0u; uint carry2r = 0u;\\
+	uint carry2l = 0u, carry2r = 0u;\\
 	for(int _i = P - 1;_i > 0;_i--){\\
 		uint cr = carryr;\\
 		carryr = carryl; carryl = 0u;\\
@@ -79,22 +64,20 @@ precision highp int;
 			carryl += uint(carryr < cl);\\
 		}\\
 		uint c2l = 0u, c2r = carry2r;\\
-		carry2r = carry2l; carry2l = carry2r >= 2147483648u ? -1u : 0u;\\
+		carry2r = carry2l; carry2l = uint(int(carry2r) >> 31);\\
 		mult(b[0], a[_i], c2l, c2r);\\
-		if(b[0] >= 2147483648u)c2l -= a[_i];\\
+		c2l -= a[_i]&-uint(b[0] >= 2147483648u);\\
 		carry2r += c2l;\\
 		carry2l += uint(carry2r < c2l) - uint(c2l >= 2147483648u);\\
 		c2l = 0u;\\
 		mult(a[0], b[_i], c2l, c2r);\\
-		if(a[0] >= 2147483648u)c2l -= b[_i];\\
+		c2l -= b[_i]&-uint(a[0] >= 2147483648u);\\
 		carry2r += c2l;\\
 		carry2l += uint(carry2r < c2l) - uint(c2l >= 2147483648u);\\
 		c2l = 0u;\\
 		cr += c2r;\\
-		if(cr < c2r){\\
-			carryr++;\\
-			carryl += uint(carryr == 0u);\\
-		}\\
+		_ = uint(cr < c2r); carryr += _;\\
+		carryl += uint(carryr==0u)&_;\\
 		a[_i] = cr;\\
 	}\\
 	a[0] = a[0] * b[0] + carryr + carry2r;\\
@@ -151,171 +134,145 @@ precision highp int;
 }
 
 #define add(a, b) {\\
-	bool _carry = false;\\
+	uint _carry = 0u;\\
 	for(int _i = P - 1;_i > 0;_i--){\\
-		a[_i] += b[_i] + uint(_carry);\\
-		_carry = _carry ? a[_i] <= b[_i] : a[_i] < b[_i];\\
+		a[_i] += b[_i] - _carry;\\
+		_carry ^= -uint((_carry^a[_i]) < (_carry^b[_i]));\\
 	}\\
-	a[0] += b[0] + uint(_carry);\\
+	a[0] += b[0] - _carry;\\
 }
 #define addw(a, b, w) {\\
-	bool _carry = false;\\
+	uint _carry = 0u;\\
 	uint _h, _l; \\
 	mult(b[P-1], w, _h, _l); \\
 	for(int _i = P - 1;_i > 1;_i--){\\
 		a[_i] += _h; \\
-		_carry = _carry ? a[_i] <= _h : a[_i] < _h;\\
+		_carry ^= -uint((_carry^a[_i] < _carry^_h));\\
 		mult(b[_i-1], w, _h, _l); \\
-		a[_i] += _l + uint(_carry);\\
-		_carry = _carry ? a[_i] <= _l : a[_i] < _l;\\
+		a[_i] += _l - _carry;\\
+		_carry ^= -uint((_carry^a[_i]) < (_carry^_l));\\
 	}\\
 	a[1] += _h; \\
-	_carry = _carry ? a[1] <= _h : a[1] < _h;\\
+	_carry ^= -uint((_carry^a[1]) < (_carry^_h));\\
 	mult(b[0], w, _h, _l); \\
 	_h = uint(int(_h << 16) >> 16); \\
-	a[1] += _l + uint(_carry);\\
-	_carry = _carry ? a[1] <= _l : a[1] < _l;\\
-	a[0] += _h + uint(_carry);\\
+	a[1] += _l - _carry;\\
+	_carry ^= -uint((_carry^a[1]) < (_carry^_l));\\
+	a[0] += _h - _carry;\\
 }
 #define addc(a, b) {\\
 	uint _c = uint(mod(b,1.) * 4294967296.); \\
 	a[1] += _c; \\
 	a[0] += uint(int(floor(b))) + uint((a[1] < _c)); \\
 }
-#define dbl(a) {\\
+#define double(a) {\\
 	for(int _i = 0; _i < P - 1; _i++) \\
 		a[_i] = (a[_i] << 1) | (a[_i + 1] >> 31); \\
 	a[P-1] <<= 1; \\
 }
 #define take(a, b) {\\
-	bool _carry = false;\\
+	uint _c = 0u;\\
 	for(int _i = P - 1;_i > 0;_i--){\\
-		a[_i] -= b[_i] + uint(_carry);\\
-		_carry = _carry ? a[_i] >= ~b[_i] : a[_i] > ~b[_i];\\
+		a[_i] -= b[_i] - _c;\\
+		_c ^= -uint((_c^a[_i]) > (_c^~b[_i]));\\
 	}\\
-	a[0] -= b[0] + uint(_carry);\\
+	a[0] -= b[0] - _c;\\
 }
-#define absolute(a) {\\
-	if(a[0] >= 2147483648u){\\
-		a[P - 1] = ~a[P - 1] + 1u;\\
-		bool o = a[P - 1] == 0u;\\
-		for(int _i = P - 2;_i >= 0;_i--){\\
-			if(o){\\
-				a[_i] = ~a[_i] + 1u;\\
-				o = a[_i] == 0u;\\
-			}else{a[_i] = ~a[_i];}\\
-		}\\
-	};\\
+#define neg(a) {\\
+	uint _o = 1u; \\
+	for(int i = P - 1;i >= 0;i--) _o &= uint((a[i] = ~a[i] + _o)==0u);\\
 }
-#define cons(a, b) {\\
+#define absolute(a) if(a[0] >= 2147483648u) neg(a)
+#define set(a, b) {\\
 	a[0] = uint(int(floor(b))); \\
 	a[1] = uint(mod(b,1.) * 4294967296.); \\
 }
 
 ${USE_BLOCK?`uniform Pos{ big x, y; };`:`uniform big x, y;`}
-uniform float p_r, p_i;
+uniform vec2 p;
 uniform uint z;
 uniform uint steps;
 uniform float gradient;
 out vec4 fragColor;
+big r, i;
 
 float Mandelbrot(){
-	RI(r, i);
 	big tr = r, ti = i, t;
-	addc(tr, p_r); addc(ti, p_i);
+	addc(tr, p.x); addc(ti, p.y);
 	for(uint j = 0u;j < steps; j++){
 		CHECK(tr, ti, 2.);
 		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
 		t = ti;
-		dbl(ti);
+		double(ti);
 		multiply(ti, tr);
 		take(tr, t);
-		dbl(t);
+		double(t);
 		add(t, tr);
 		multiply(tr, t);
 		add(tr, r);
 		add(ti, i);
 	}
-	return -999999.;
+	return intBitsToFloat(-1);
 }
 float Julia(){
-	RI(r, i);
-	big tr = r, ti = i, t;
+	big t;
 	for(uint j = 0u;j < steps; j++){
-		CHECK(tr, ti, 2.);
+		CHECK(r, i, 2.);
 		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
-		t = ti;
-		dbl(ti);
-		multiply(ti, tr);
-		take(tr, t);
-		dbl(t);
-		add(t, tr);
-		multiply(tr, t);
-		addc(tr, p_r);
-		addc(ti, p_i);
+		t = i;
+		double(i);
+		multiply(i, r);
+		take(r, t);
+		double(t);
+		add(t, r);
+		multiply(r, t);
+		addc(r, p.x);
+		addc(i, p.y);
 	}
-	return -999999.;
+	return intBitsToFloat(-1);
 }
 
 float BurningShip(){
-	RI(r, i);
 	big tr, ti, t;
-	cons(tr, p_r); cons(ti, p_i);
+	set(tr, p.x); set(ti, p.y);
 	for(uint j = 0u;j < steps; j++){
 		CHECK(tr, ti, 2.);
 		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
 		t = ti;
-		dbl(ti);
+		double(ti);
 		multiply(ti, tr);
 		absolute(ti);
 		take(tr, t);
-		dbl(t);
+		double(t);
 		add(t, tr);
 		multiply(tr, t);
 		add(tr, r);
 		add(ti, i);
 	}
-	return -999999.;
+	return intBitsToFloat(-1);
 }
 
 float BurningJulia(){
-	RI(r, i);
 	big tr = r, ti = i, t;
 	for(uint j = 0u;j < steps; j++){
 		CHECK(tr, ti, 2.);
 		/*Fast Complex Square Alg. (made by me, blob.kat@hotmail.com)*/
 		t = ti;
-		dbl(ti);
+		double(ti);
 		multiply(ti, tr);
 		absolute(ti);
 		take(tr, t);
-		dbl(t);
+		double(t);
 		add(t, tr);
 		multiply(tr, t);
-		addc(tr, p_r);
-		addc(ti, p_i);
+		addc(tr, p.x);
+		addc(ti, p.y);
 	}
-	return -999999.;
+	return intBitsToFloat(-1);
 }
 
-/*int mandelbrot_old(float r, float i){
-	float tr = r; float ti = i; float t;
-	for(int j = 0;j < 100; j++){
-		if(ti * ti + tr * tr > 4.){ return float(j); }
-		t = ti; ti += ti;
-		ti *= tr;
-		tr -= t;
-		t += t;
-		t += tr;
-		tr *= t;
-		tr += r;
-		ti += i;
-	}
-	return -999999.;
-}*/
-
 vec3 Rainbow(float a){
-	a = mod(sqrt(a * 5.), 6.);
+	a = mod(a, 6.);
 	if(a < 2.){
 		return a < 1. ? vec3(1.,a,0.) : vec3(2.-a,1.,0.);
 	}else if(a < 4.){
@@ -326,7 +283,7 @@ vec3 Rainbow(float a){
 }
 
 vec3 Ocean(float a){
-	a = mod(sqrt(a * 5.), 4.);
+	a = mod(a, 4.);
 	if(a < 2.){
 		return a < 1. ? vec3(0.,0.,a/2.) : vec3(0.,a/2.-.5,a/2.);
 	}else{
@@ -335,12 +292,12 @@ vec3 Ocean(float a){
 }
 
 vec3 Grayscale(float a){
-	a = mod(sqrt(a * 5.), 2.); if(a > 1.) a = 2. - a;
+	a = mod(a, 2.); if(a > 1.) a = 2. - a;
 	return vec3(a);
 }
 
 vec3 Burning(float a){
-	a = mod(sqrt(a * 5.), 3.);
+	a = mod(a, 3.);
 	float b = 0.;
 	if(a > 2.){
 		b = 1. - abs(a * -2. + 5.);
@@ -350,7 +307,7 @@ vec3 Burning(float a){
 }
 
 vec3 FiveColor(float a){
-	a = mod(sqrt(a * 5.), 12.);
+	a = mod(a, 12.);
 	if(a >= 6.){
 		if(a >= 10.){
 			return a >= 11. ? vec3(1.,12.-a,12.-a) : vec3(1.,a-10.,1.);
@@ -370,11 +327,31 @@ vec3 FiveColor(float a){
 	}
 }
 
-void main() {
+void main(){
+	r = x; i = y;
+	uint _cx = uint(gl_FragCoord.x);
+	uint _cy = uint(gl_FragCoord.y);
+	uint _c2x = 0u, _c2y = 0u;
+	uint _a = z & 31u, _zi = (z >> 5u);
+	if(_a != 0u){
+		_c2x = _cx >> _a; _c2y = _cy >> _a;
+		_cx <<= 32u - _a; _cy <<= 32u - _a;
+		_zi++;
+	}
+	if(_zi >= uint(P)){
+		_cx = _c2x; _cy = _c2y;
+		if(_zi > uint(P)) _zi = uint(P);
+	}else{
+		_a = r[_zi]; _cx = _c2x + uint((r[_zi] += _cx) < _a);
+		_a = i[_zi]; _cy = _c2y + uint((i[_zi] += _cy) < _a);
+	}
+	while(_zi-- > 0u && (_cx > 0u || _cy > 0u)){
+		_a = r[_zi]; _cx = uint((r[_zi] += _cx) < _a);
+		_a = i[_zi]; _cy = uint((i[_zi] += _cy) < _a);
+	}
 	float a = ${fractal.value}();
-	fragColor.w = 1.;
-	if(a == -999999.) discard;
-	fragColor.xyz = ${mode.value}(max(0., a / gradient));
+	fragColor = vec4(0);
+	if(!isnan(a)) fragColor.xyz = ${mode.value}(log2(max(1., a+1.)) * gradient);
 }`)
 	gl.attachShader(program, fragmentShader)
 	gl.linkProgram(program)
@@ -391,7 +368,16 @@ void main() {
 		arr = new Uint32Array(P*8)
 	}
 	console.timeEnd('compile')
-	return function(x, y, z, steps = 100, gradient = 15){
+	let uniX, uniY
+	if(!USE_BLOCK){
+		uniX = gl.getUniformLocation(program, "x")
+		uniY = gl.getUniformLocation(program, "y")
+	}
+	const uniP = gl.getUniformLocation(program, "p")
+	const uniZ = gl.getUniformLocation(program, "z")
+	const uniSteps = gl.getUniformLocation(program, "steps")
+	const uniGradient = gl.getUniformLocation(program, "gradient")
+	return (x, y, z, steps = 100, gradient = 15) => {
 		if(USE_BLOCK){
 			for(let i = 0; i < P; i++){
 				arr[i<<2] = x[i]
@@ -399,14 +385,13 @@ void main() {
 			}
 			gl.bufferData(gl.UNIFORM_BUFFER, arr, gl.DYNAMIC_DRAW)
 		}else{
-			gl.uniform1uiv(gl.getUniformLocation(program, "x"), x)
-			gl.uniform1uiv(gl.getUniformLocation(program, "y"), y)
+			gl.uniform1uiv(uniX, x)
+			gl.uniform1uiv(uniY, y)
 		}
-		gl.uniform1f(gl.getUniformLocation(program, "p_r"), +r.value)
-		gl.uniform1f(gl.getUniformLocation(program, "p_i"), +i.value)
-		gl.uniform1ui(gl.getUniformLocation(program, "z"), z)
-		gl.uniform1ui(gl.getUniformLocation(program, "steps"), steps)
-		gl.uniform1f(gl.getUniformLocation(program, "gradient"), gradient)
+		gl.uniform2f(uniP, +r.value, +i.value)
+		gl.uniform1ui(uniZ, z)
+		gl.uniform1ui(uniSteps, steps)
+		gl.uniform1f(uniGradient, 0.5 ** gradient)
 	}
 }
 
@@ -431,7 +416,7 @@ function add(a, b) {
 	a[0] += b[0] + carry
 }
 const shr = (num, pos) => {
-	let t = cons(num / 2 ** (pos & 31), pos >>= 5)
+	let t = set(num / 2 ** (pos & 31), pos >>= 5)
 	if(num<0)while(pos--) t[pos] = -1
 	else while(pos--) t[pos] = 0
 	return t
@@ -441,9 +426,8 @@ const shr = (num, pos) => {
 let shader, x = new Uint32Array(), y = new Uint32Array(), z = 9, t = new Uint32Array()
 let rx = 0, ry = 0, rz = 1
 let P = 2
-function setprecision(l = P){
-	P = Math.max(2, l)
-	shader = fractalShader(P)
+function setprecision(P2 = P){
+	shader = fractalShader(P = Math.max(2, P2))
 	if(P > x.length){
 		let newx = new Uint32Array(P), newy = new Uint32Array(P)
 		newx.set(x, 0)
@@ -458,23 +442,19 @@ function setprecision(l = P){
 }
 const c2 = document.createElement('canvas').getContext('2d', {willReadFrequently: true})
 async function draw(){
-	const pr = window.event ? new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))) : new Promise(requestAnimationFrame)
 	//Clear buffer (optional)
 	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	const a = performance.now()
-	info.style.setProperty('--c', 'red')
 	if(z>P*32-36 && !lock) setprecision(P+1)
-	else if(z<(P-4)*32 && !lock)setprecision(P-2)
-	shader(x, y, z, z*2**slider.value, gradient.value**2)
-	await pr
+	else if(z<(P-4)*32 && !lock) setprecision(P-2)
+	shader(x, y, z, z*2**slider.value, gradient.value)
+	transform()
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 	c2.drawImage(canvas,0,0,1,1,0,0,1,1)
-	c2.getImageData(0,0,1,1).data
-	transform()
+	c2.getImageData(0,0,1,1).data[0]
 	rendering = true
 	const dt = performance.now() - a
-	info.textContent = dt >= 10000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
-	info.style.setProperty('--c', '#0a0')
+	info.textContent = dt >= 2000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
 	requestAnimationFrame(() => rendering = false)
 }
 function transform(){
@@ -482,7 +462,7 @@ function transform(){
 	stats.textContent = getStats()
 }
 let rendering = false, zoomIn = false
-function cons(v, i, c = t){
+function set(v, i, c = t){
 	if(P > i)c[i] = Math.floor(v)
 	if(P > i + 1)c[i + 1] = Math.floor(v * 4294967296)
 	if(P > i + 2)c[i + 2] = Math.floor(v * 18446744073709551616)
@@ -550,19 +530,18 @@ onresize = function(a){
 	my = HEIGHT / 2
 	gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
 	if(!a){
-		cons(WIDTH * (-.5 / 2**z) - .6, 0, x)
-		cons(HEIGHT * (-.5 / 2**z), 0, y)
+		set(WIDTH * (-.5 / 2**z) - .6, 0, x)
+		set(HEIGHT * (-.5 / 2**z), 0, y)
 	}
 	draw()
 }
 setprecision(P)
-onresize(false)
 
 function wheel(deltaY){
-	if(rendering)return
+	if(rendering) return
 	let d = Math.max(0.5, Math.min(2, 0.99 ** deltaY))
 	d = Math.max(d, 2 ** (4+Math.log2(pxrt) - z) / rz)
-	if(d>1)zoomIn=true
+	if(d>1) zoomIn = true
 	rz *= d
 	rx += mx * (d - 1) / rz
 	ry += my * (d - 1) / rz
@@ -600,7 +579,7 @@ function getStats(){
 	add(a, y)
 	const yStr = arrToNum(a)
 	const exp = (z - 9) / Math.log2(10) + Math.log10(rz)
-	return `r: ${xStr}\ni: ${yStr}\nzoom: ${(10**((exp%1+1)%1)).toFixed(2)}x10^${Math.floor(exp)}\nprecision: ${P*32} bits\nG: ${gradient.value**2}, iter: ${z*2**slider.value}`
+	return `r: ${xStr}\ni: ${yStr}\nzoom: ${(10**((exp%1+1)%1)).toFixed(2)}x10^${Math.floor(exp)}\nprecision: ${P*32} bits\niter: ${z*2**slider.value}`
 }
 stats.onclick = () => navigator.clipboard.writeText(getStats())
 
@@ -629,7 +608,6 @@ save.onclick = async () => {
 	//Clear buffer (optional)
 	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	const a = performance.now()
-	info.style.setProperty('--c', 'red')
 	rx -= WIDTH/4 * (rz-1)
 	ry -= WIDTH/4 * (rz-1)
 	add(x, shr(rx, z))
@@ -653,7 +631,6 @@ save.onclick = async () => {
 	canvas.width = WIDTH >>>= Math.max(0, -supersample.value)
 	canvas.height = HEIGHT >>>= Math.max(0, -supersample.value)
 	info.textContent = dt >= 10000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
-	info.style.setProperty('--c', '#0a0')
 	c.canvas.toBlob(blob => {
 		const a = document.createElement('a')
 		a.href = URL.createObjectURL(blob)
@@ -676,3 +653,6 @@ ip.onclick = () => {
 
 onkeyup = e => {const p = keypresses[e.key];p&&(e.preventDefault(),p(e))}
 onkeydown = e => {keypresses[e.key]&&e.preventDefault()}
+
+
+onresize(null)
