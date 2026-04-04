@@ -126,7 +126,7 @@ precision highp int;
 		cr += c2r;\\
 		if(cr < c2r){\\
 			carryr++;\\
-			carryl += (carryr == 0u);\\
+			carryl += uint(carryr == 0u);\\
 		}\\
 		a[_i] = cr;\\
 	}\\
@@ -180,7 +180,7 @@ precision highp int;
 }
 #define neg(a) {\\
 	uint _o = 1u; \\
-	for(int i = P - 1;i >= 0;i--) _o &= uint((a[i] = ~a[i] + _o)==0u);\\
+	for(int _i = P - 1; _i >= 0; _i--) _o &= uint((a[_i] = ~a[_i] + _o)==0u);\\
 }
 #define absolute(a) if(a[0] >= 2147483648u) neg(a)
 #define set(a, b) {\\
@@ -297,13 +297,23 @@ vec3 Grayscale(float a){
 }
 
 vec3 Burning(float a){
-	a = mod(a, 3.);
-	float b = 0.;
-	if(a > 2.){
-		b = 1. - abs(a * -2. + 5.);
+	a = fract(a)*6.;
+	float b = 0., c = 0.;
+	if(a > 4.){
+		c = 1. - abs(a-5.);
+		a = 0.; c *= c;
+	}else if(a>2.){
+		b = 1. - abs(a-3.);
 		a = 0.;
  	}else if(a > 1.) a = 2. - a;
-	return vec3(a+b,a+b*b,a);
+	return vec3(a+b+c,a+b*b+c*.25,a);
+}
+
+vec3 BlueGold(float a){
+	a = fract(a+.5)*2.;
+	#define gold(x) a<.5?vec3(1.,1.-1.2*a*a,1.-a*2.):vec3(2.-a*2.,(1.-a)*(1.-a)*2.8,0)
+	if(a >= 1.){ a -= 1.; return 1.-(gold(a)); }
+	else return gold(a);
 }
 
 vec3 FiveColor(float a){
@@ -350,8 +360,8 @@ void main(){
 		_a = i[_zi]; _cy = uint((i[_zi] += _cy) < _a);
 	}
 	float a = ${fractal.value}();
-	fragColor = vec4(0);
-	if(!isnan(a)) fragColor.xyz = ${mode.value}(log2(max(1., a+1.)) * gradient);
+	fragColor = vec4(0, 0, 0, 1);
+	if(!isnan(a)) fragColor.xyz = ${mode.value}(sqrt(max(0.,a)) * gradient);
 }`)
 	gl.attachShader(program, fragmentShader)
 	gl.linkProgram(program)
@@ -395,7 +405,7 @@ void main(){
 	}
 }
 
-for(const k of ['Rainbow', 'FiveColor', 'Ocean', 'Grayscale', 'Burning']){
+for(const k of ['Rainbow', 'FiveColor', 'BlueGold', 'Ocean', 'Grayscale', 'Burning']){
 	if(!mode.value) mode.value = k
 	const o = document.createElement('option')
 	o.value = o.textContent = k
