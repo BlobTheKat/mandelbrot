@@ -656,10 +656,11 @@ function wheel(deltaY){
 			trz = d
 			let last = performance.now()
 			requestAnimationFrame(function A(){
-				const dt = Math.min(1, (performance.now()-last)*.01); last = performance.now()
+				const dt = Math.min(.5, (performance.now()-last)*.01); last = performance.now()
 				let d = trz
 				if(Math.abs(trz-1) > .001) d **= dt, trz /= d, requestAnimationFrame(A)
 				else trz = NaN
+				if(d>1) zoomIn = true
 				rz *= d
 				rx += mx * (d - 1) / rz
 				ry += my * (d - 1) / rz
