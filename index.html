@@ -10,16 +10,17 @@
   <body>
     <canvas id="canvas" width="1024" height="1024"></canvas>
 		<div title="click to copy coords" id="stats"></div>
-		<input type="range" min="0" max="20" value="4" id="slider" onchange="draw()" />
+		<input type="range" min="0" max="20" value="4" id="slider" />
 		<div id="info"></div>
 		<div id="save">save image</div> <div id="fs">fullscreen</div>
 		<div id="lp">lock precision</div> <div id="ip">inc precision</div>
 		<div id="auto">auto</div>
 		<input type="range" id="supersample" min="-4" max="1" value="0" onchange="const gain = this.value-Math.log2(pxrt/devicePixelRatio);z+=gain;rx*=2**gain;ry*=2**gain;pxrt=2**this.value*devicePixelRatio;window.onresize(event)" />
-		<input type="range" id="gradient" min="-5" value="2" max="10" step="0.01" oninput="if(live.checked)draw()" onchange="draw()" />
-		<input type="checkbox" id="smooth" checked onchange="setprecision();draw()" />
-		<select id="mode" onchange="setprecision();draw()"></select>
-		<select id="fractal" onchange="setprecision();draw()"></select>
+		<input type="range" id="gradient" min="-5" value="2" max="10" step="0.01" />
+		<input type="range" id="gradient2" min="0" value="0" max="1" step="0.001" />
+		<input type="checkbox" id="smooth" checked />
+		<select id="mode"></select>
+		<select id="fractal"></select>
 		<input type="checkbox" id="live" />
 		<input type="range" id="r" min="-2" value="0" max="2" step="0.001" data-v="0.000" oninput="{let v = +this.value; if(v>-0.03&&v<0.03)this.value=v=0;this.dataset.v=v.toFixed(3);if(live.checked)draw()}" onchange="draw()" />
 		<input type="range" id="i" min="-2" value="0" max="2" step="0.001" data-v="0.000" oninput="{let v = +this.value; if(v>-0.03&&v<0.03)this.value=v=0;this.dataset.v=v.toFixed(3);if(live.checked)draw()}" onchange="draw()" />
@@ -125,18 +126,22 @@
 			width: 140px;
 			margin: 0;
 		}
-		#gradient, #mode{
+		#gradient, #mode, #gradient2{
 			position: absolute;
 			bottom: 10px;
 			left: 10px;
-			width: 230px;
+			width: 220px;
 			margin: 0; padding: 0;
+		}
+		#gradient2{
+			position: absolute;
+			bottom: 35px; left: 160px; width: 100px;
 		}
 		#smooth{
 			position: absolute;
 			margin: 0; padding: 0;
-			bottom: 35px;
-			left: 219px;
+			bottom: 10px;
+			left: 240px;
 			cursor: pointer;
 			height: 19px; width: 19px;
 		}
@@ -144,8 +149,8 @@
 			outline: none;
 			bottom: 35px;
 			border-color: #8888;
-    	border-radius: 100px;
-			width: 200px;
+    		border-radius: 100px;
+			width: 140px;
 		}
 		#fractal{
 			position: absolute;
