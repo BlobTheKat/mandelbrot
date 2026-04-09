@@ -580,7 +580,7 @@ function set(v, i, c = t){
 	return c
 }
 function pos(a = false){
-	if(rz > 2){
+	if(rz > 2 && zoomIn){
 		//zoom in
 		const padding = .5 - 1/rz
 		add(x, shr(rx - WIDTH*padding/2, z))
