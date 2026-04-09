@@ -563,7 +563,7 @@ slider.onchange = () => {
 	steps = Math.floor(z*2**slider.value)
 	draw()
 }
-let lastDt = 0, lraf = 0
+let lastDt = 0, drawNum = 0
 const done = (dt) => {
 	info.textContent = dt >= 2000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
 	rendering = false; lraf = 0
@@ -571,12 +571,12 @@ const done = (dt) => {
 function draw(){
 	//Clear buffer (optional)
 	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-	if(lraf) cancelAnimationFrame(lraf)
+	const dn = ++drawNum
 	let t0 = performance.now()
 	if(z>P*32-36 && !lock) setprecision(P+1)
 	else if(z<(P-3)*32 && !lock) setprecision(P-1)
-	// Guarantee full utilization up to 16K shading units
-	let divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>15), Math.max(0, Math.floor(Math.log2(lastDt/100))))
+	// Guarantee full utilization up to 4K shading units
+	let divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>13), Math.max(0, Math.floor(Math.log2(lastDt/100))))
 	if(divs){
 		if(divs < 4) divs = 4
 		const px = mx/rz+rx, py = my/rz+ry
@@ -586,6 +586,7 @@ function draw(){
 		let t0t = 0, drawn = 0
 		let fence = null
 		function pop(){
+			if(dn != drawNum) return
 			if(fence){
 				const r = gl.clientWaitSync(fence, 0, 0)
 				if(r == gl.TIMEOUT_EXPIRED) return lraf = requestAnimationFrame(pop)
@@ -611,6 +612,7 @@ function draw(){
 	let fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
 	rendering = true
 	lraf = requestAnimationFrame(function check(){
+		if(dn != drawNum) return
 		const r = gl.clientWaitSync(fence, 0, 0)
 		if(r == gl.TIMEOUT_EXPIRED) return lraf = requestAnimationFrame(check)
 		gl.deleteSync(fence)
