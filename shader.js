@@ -1,5 +1,5 @@
 /** @type {WebGL2RenderingContext} */
-const gl = canvas.getContext('webgl2', {depth: false, alpha: false})
+const gl = canvas.getContext('webgl2', {depth: false, alpha: false, preserveDrawingBuffer: false})
 if (!gl) throw "WebGLn't"
 gl.disable(gl.DEPTH_TEST) // No 3d
 gl.disable(gl.CULL_FACE)
@@ -357,10 +357,10 @@ void main(){
 	const uniP = gl.getUniformLocation(p1, "p")
 	const uniZ = gl.getUniformLocation(p1, "z")
 	const uniSteps = gl.getUniformLocation(p1, "steps")
-	return (x, y, z, steps = 100) => {
+	const f = (x, y, z, steps = 100, px=0, py=0, pw=WIDTH, ph=HEIGHT) => {
 		gl.useProgram(p1)
 		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb)
-		gl.viewport(0, 0, WIDTH, HEIGHT)
+		gl.viewport(px, py, pw, ph)
 		if(USE_BLOCK){
 			for(let i = 0; i < P; i++){
 				arr[i] = x[i]
@@ -376,6 +376,13 @@ void main(){
 		gl.uniform1ui(uniSteps, steps)
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 	}
+	f.clear = () => {
+		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb)
+		gl.viewport(0, 0, WIDTH, HEIGHT)
+		gl.clearColor(Infinity, 0, 0, 0)
+		gl.clear(gl.COLOR_BUFFER_BIT)
+	}
+	return f
 }
 
 const PALETTES = {
@@ -483,14 +490,14 @@ gl.linkProgram(p2)
 gl.useProgram(p2)
 const uniGradient = gl.getUniformLocation(p2, "gradient"), paletteUni = gl.getUniformLocation(p2, "palette")
 const boundsUni = gl.getUniformLocation(p2, "bounds"), uniSteps2 = gl.getUniformLocation(p2, "steps")
-function drawToMain(justDrew = false){
+let luSteps = -1
+function drawToMain(){
 	gl.useProgram(p2)
 	gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
 	gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
 	gl.uniform3f(boundsUni, rx/WIDTH, ry/HEIGHT, 1/rz)
-	if(justDrew){
+	if(luSteps != steps)
 		gl.uniform1f(uniSteps2, steps)
-	}
 	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
 	stats.textContent = getStats()
 }
@@ -556,20 +563,47 @@ slider.onchange = () => {
 	steps = Math.floor(z*2**slider.value)
 	draw()
 }
+let lastDt = 0, lraf = 0
+const done = (dt) => {
+	info.textContent = dt >= 2000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
+	rendering = false; lraf = 0
+}
+const gpu2cpuFence = () => {
+	c2.drawImage(gl.canvas,0,0,1,1,0,0,1,1); c2.getImageData(0,0,1,1)
+}
 function draw(){
 	//Clear buffer (optional)
 	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-	const a = performance.now()
+	if(lraf) cancelAnimationFrame(lraf)
+	let t0 = performance.now()
 	if(z>P*32-36 && !lock) setprecision(P+1)
 	else if(z<(P-3)*32 && !lock) setprecision(P-1)
-	shader(x, y, z, steps)
-	drawToMain(true)
-	c2.drawImage(canvas,0,0,1,1,0,0,1,1)
-	c2.getImageData(0,0,1,1)
+	// Guarantee full utilization up to 16K shading units
+	const divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>15), Math.max(0, Math.floor(Math.log2(lastDt/150))))
+	if(divs){
+		const px = mx/rz+rx, py = my/rz+ry
+		const xDivs = 1<<(divs+1>>1), yDivs = 1<<(divs>>1)
+		const chs = Array.from({length: xDivs*yDivs}, (_, i) => ({x: ((i&(xDivs-1))+.5)/xDivs*WIDTH, y: (Math.floor(i/xDivs)+.5)/yDivs*HEIGHT})).sort((a,b) => {const ax=a.x-px,ay=a.y-py,bx=b.x-px,by=b.y-py; return bx*bx+by*by-ax*ax-ay*ay})
+		const rdx = .5/xDivs*WIDTH, rdy = .5/yDivs*HEIGHT
+		let t0t = 0
+		function pop(){
+			if(!chs.length) return done(lastDt = t0t)
+			done(t0t -= (t0 - (t0 = performance.now())))
+			const {x: xm, y: ym} = chs.pop()
+			const x0 = Math.round(xm-rdx), x1 = Math.round(xm+rdx)
+			const y0 = Math.round(ym-rdy), y1 = Math.round(ym+rdy)
+			shader(x, y, z, steps, x0, y0, x1-x0, y1-y0)
+			gpu2cpuFence()
+			drawToMain()
+			lraf = requestAnimationFrame(pop)
+		}
+		shader.clear()
+		requestAnimationFrame(pop)
+	}else shader(x, y, z, steps)
+	gpu2cpuFence()
+	drawToMain()
 	rendering = true
-	const dt = performance.now() - a
-	info.textContent = dt >= 2000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
-	requestAnimationFrame(() => rendering = false)
+	lraf = requestAnimationFrame(() => done(lastDt = performance.now() - t0))
 }
 smooth.onchange = fractal.onchange = () => { setprecision(); draw() }
 let rendering = false, zoomIn = false
