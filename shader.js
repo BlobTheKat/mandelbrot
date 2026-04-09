@@ -568,7 +568,6 @@ let adjWorstHang = 0, drawNum = 0
 const done = (dt) => {
 	info.textContent = dt >= 2000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
 	rendering = false; lraf = 0
-	console.log('done')
 }
 function draw(){
 	//Clear buffer (optional)
@@ -622,12 +621,10 @@ function draw(){
 	}else shader(x, y, z, steps)
 	drawToMain()
 	let fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
-	console.log('drawing')
 	rendering = true
 	lraf = requestAnimationFrame(function check(){
 		if(dn != drawNum) return
 		const r = gl.clientWaitSync(fence, 0, 0)
-		console.log(r)
 		if(r == gl.TIMEOUT_EXPIRED) return lraf = requestAnimationFrame(check)
 		gl.deleteSync(fence)
 		if(r != gl.CONDITION_SATISFIED && r != gl.ALREADY_SIGNALED) return // error
