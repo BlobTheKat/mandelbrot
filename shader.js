@@ -533,7 +533,7 @@ const shr = (num, pos) => {
 
 //z=8 means step in sizes of 1.0 >> 8 (1/256th) per pixel
 let shader, x = new Uint32Array(), y = new Uint32Array(), z = 9, t = new Uint32Array()
-let rx = 0, ry = 0, rz = 1
+let rx = 0, ry = 0, rz = 1.05
 let P = 2
 function setprecision(P2 = P){
 	P = Math.max(2, P2)
@@ -580,7 +580,7 @@ function set(v, i, c = t){
 	return c
 }
 function pos(a = false){
-	if(rz > 1.995 && zoomIn){
+	if(rz >= 2 && zoomIn){
 		//zoom in
 		const padding = .5 - 1/rz
 		add(x, shr(rx - WIDTH*padding/2, z))
