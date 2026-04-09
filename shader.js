@@ -568,9 +568,6 @@ const done = (dt) => {
 	info.textContent = dt >= 2000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
 	rendering = false; lraf = 0
 }
-const gpu2cpuFence = () => {
-	c2.drawImage(gl.canvas,0,0,1,1,0,0,1,1); c2.getImageData(0,0,1,1)
-}
 function draw(){
 	//Clear buffer (optional)
 	//gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -579,31 +576,47 @@ function draw(){
 	if(z>P*32-36 && !lock) setprecision(P+1)
 	else if(z<(P-3)*32 && !lock) setprecision(P-1)
 	// Guarantee full utilization up to 16K shading units
-	const divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>15), Math.max(0, Math.floor(Math.log2(lastDt/150))))
+	let divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>15), Math.max(0, Math.floor(Math.log2(lastDt/100))))
 	if(divs){
+		if(divs < 4) divs = 4
 		const px = mx/rz+rx, py = my/rz+ry
 		const xDivs = 1<<(divs+1>>1), yDivs = 1<<(divs>>1)
 		const chs = Array.from({length: xDivs*yDivs}, (_, i) => ({x: ((i&(xDivs-1))+.5)/xDivs*WIDTH, y: (Math.floor(i/xDivs)+.5)/yDivs*HEIGHT})).sort((a,b) => {const ax=a.x-px,ay=a.y-py,bx=b.x-px,by=b.y-py; return bx*bx+by*by-ax*ax-ay*ay})
 		const rdx = .5/xDivs*WIDTH, rdy = .5/yDivs*HEIGHT
-		let t0t = 0
+		let t0t = 0, drawn = 0
+		let fence = null
 		function pop(){
+			if(fence){
+				const r = gl.clientWaitSync(fence, 0, 0)
+				if(r == gl.TIMEOUT_EXPIRED) return lraf = requestAnimationFrame(pop)
+				gl.deleteSync(fence)
+				if(r != gl.CONDITION_SATISFIED) return // error
+			}
 			if(!chs.length) return done(lastDt = t0t)
+			lraf = requestAnimationFrame(pop)
 			done(t0t -= (t0 - (t0 = performance.now())))
+			lastDt += (t0t/(++drawn)*(drawn+chs.length) - lastDt) / Math.max(1, xDivs*yDivs*.25)
 			const {x: xm, y: ym} = chs.pop()
 			const x0 = Math.round(xm-rdx), x1 = Math.round(xm+rdx)
 			const y0 = Math.round(ym-rdy), y1 = Math.round(ym+rdy)
 			shader(x, y, z, steps, x0, y0, x1-x0, y1-y0)
-			gpu2cpuFence()
 			drawToMain()
-			lraf = requestAnimationFrame(pop)
+			fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
 		}
 		shader.clear()
-		requestAnimationFrame(pop)
+		pop()
+		return
 	}else shader(x, y, z, steps)
-	gpu2cpuFence()
 	drawToMain()
+	let fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
 	rendering = true
-	lraf = requestAnimationFrame(() => done(lastDt = performance.now() - t0))
+	lraf = requestAnimationFrame(function check(){
+		const r = gl.clientWaitSync(fence, 0, 0)
+		if(r == gl.TIMEOUT_EXPIRED) return lraf = requestAnimationFrame(check)
+		gl.deleteSync(fence)
+		if(r != gl.CONDITION_SATISFIED) return // error
+		done(lastDt = performance.now() - t0)
+	})
 }
 smooth.onchange = fractal.onchange = () => { setprecision(); draw() }
 let rendering = false, zoomIn = false
