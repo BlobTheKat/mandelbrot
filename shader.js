@@ -559,11 +559,12 @@ function setprecision(P2 = P){
 }
 const c2 = document.createElement('canvas').getContext('2d', {willReadFrequently: true})
 let steps = z*2**slider.value
-slider.onchange = () => {
+slider.onchange = e => {
 	steps = Math.floor(z*2**slider.value)
+	if(e){ mx = WIDTH / 2; my = HEIGHT / 2 }
 	draw()
 }
-let lastDt = 0, drawNum = 0
+let adjWorstHang = 0, drawNum = 0
 const done = (dt) => {
 	info.textContent = dt >= 2000 ? (dt/1000).toFixed(2)+'s' : (dt).toFixed(1) + 'ms'
 	rendering = false; lraf = 0
@@ -576,7 +577,7 @@ function draw(){
 	if(z>P*32-36 && !lock) setprecision(P+1)
 	else if(z<(P-3)*32 && !lock) setprecision(P-1)
 	// Guarantee full utilization up to 4K shading units
-	let divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>13), Math.max(0, Math.floor(Math.log2(lastDt/100))))
+	let divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>13), Math.max(0, Math.floor(Math.log2(adjWorstHang/100))))
 	if(divs){
 		if(divs < 4) divs = 4
 		const px = mx/rz+rx, py = my/rz+ry
@@ -593,10 +594,11 @@ function draw(){
 				gl.deleteSync(fence)
 				if(r != gl.CONDITION_SATISFIED) return // error
 			}
-			if(!chs.length) return done(lastDt = t0t)
+			if(!chs.length) return done(t0t)
 			lraf = requestAnimationFrame(pop)
-			done(t0t -= (t0 - (t0 = performance.now())))
-			lastDt += (t0t/(++drawn)*(drawn+chs.length) - lastDt) / Math.max(1, xDivs*yDivs*.25)
+			const dt = -(t0 - (t0 = performance.now()))
+			done(t0t += dt)
+			adjWorstHang = Math.max(adjWorstHang, dt*xDivs*yDivs)
 			const {x: xm, y: ym} = chs.pop()
 			const x0 = Math.round(xm-rdx), x1 = Math.round(xm+rdx)
 			const y0 = Math.round(ym-rdy), y1 = Math.round(ym+rdy)
@@ -617,7 +619,7 @@ function draw(){
 		if(r == gl.TIMEOUT_EXPIRED) return lraf = requestAnimationFrame(check)
 		gl.deleteSync(fence)
 		if(r != gl.CONDITION_SATISFIED) return // error
-		done(lastDt = performance.now() - t0)
+		done(adjWorstHang = performance.now() - t0)
 	})
 }
 smooth.onchange = fractal.onchange = () => { setprecision(); draw() }
@@ -665,8 +667,7 @@ onresize = e => {
 	HEIGHT = Math.round(visualViewport.height*visualViewport.scale * pxrt)
 	gl.canvas.width = innerWidth*devicePixelRatio
 	gl.canvas.height = innerHeight*devicePixelRatio
-	mx = WIDTH / 2
-	my = HEIGHT / 2
+	mx = WIDTH / 2; my = HEIGHT / 2
 	if(!e){
 		set(WIDTH * (-.5 / 2**z) - .6, 0, x)
 		set(HEIGHT * (-.5 / 2**z), 0, y)
@@ -787,3 +788,10 @@ onkeydown = e => {keypresses[e.key]&&e.preventDefault()}
 
 
 onresize(null)
+supersample.onchange = () => {
+	const gain = Math.round(this.value-Math.log2(pxrt/devicePixelRatio))
+	z += gain; rx *= 2**gain; ry *= 2**gain
+	adjWorstHang *= 4**gain
+	pxrt = 2**this.value*devicePixelRatio
+	onresize(event)
+}

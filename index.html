@@ -15,7 +15,7 @@
 		<div id="save">save image</div> <div id="fs">fullscreen</div>
 		<div id="lp">lock precision</div> <div id="ip">inc precision</div>
 		<div id="auto">auto</div>
-		<input type="range" id="supersample" min="-4" max="1" value="0" onchange="const gain = this.value-Math.log2(pxrt/devicePixelRatio);z+=gain;rx*=2**gain;ry*=2**gain;pxrt=2**this.value*devicePixelRatio;window.onresize(event)" />
+		<input type="range" id="supersample" min="-4" max="1" value="0" />
 		<input type="range" id="gradient" min="-5" value="2" max="10" step="0.01" />
 		<input type="range" id="gradient2" min="0" value="0" max="1" step="0.001" />
 		<input type="checkbox" id="smooth" checked />
