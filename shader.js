@@ -584,8 +584,9 @@ function draw(){
 		const xDivs = 1<<(divs+1>>1), yDivs = 1<<(divs>>1)
 		const chs = Array.from({length: xDivs*yDivs}, (_, i) => ({x: ((i&(xDivs-1))+.5)/xDivs*WIDTH, y: (Math.floor(i/xDivs)+.5)/yDivs*HEIGHT})).sort((a,b) => {const ax=a.x-px,ay=a.y-py,bx=b.x-px,by=b.y-py; return bx*bx+by*by-ax*ax-ay*ay})
 		const rdx = .5/xDivs*WIDTH, rdy = .5/yDivs*HEIGHT
-		let t0t = 0, drawn = 0
+		let t0t = 0
 		let fence = null
+		let nAdjWorstHang = 0
 		function pop(){
 			if(dn != drawNum) return
 			if(fence){
@@ -594,11 +595,19 @@ function draw(){
 				gl.deleteSync(fence)
 				if(r != gl.CONDITION_SATISFIED) return // error
 			}
-			if(!chs.length) return done(t0t)
+			if(!chs.length){
+				if(nAdjWorstHang < adjWorstHang)
+					adjWorstHang = nAdjWorstHang
+				return done(t0t)
+			}
 			lraf = requestAnimationFrame(pop)
 			const dt = -(t0 - (t0 = performance.now()))
 			done(t0t += dt)
-			adjWorstHang = Math.max(adjWorstHang, dt*xDivs*yDivs)
+			const hang = dt*xDivs*yDivs
+			if(hang > nAdjWorstHang && dt>50) nAdjWorstHang = hang
+			if(hang > adjWorstHang) adjWorstHang = hang
+			if(chs.length < (xDivs*yDivs>>1) && chs.length > 2 && nAdjWorstHang < adjWorstHang)
+				adjWorstHang = nAdjWorstHang
 			const {x: xm, y: ym} = chs.pop()
 			const x0 = Math.round(xm-rdx), x1 = Math.round(xm+rdx)
 			const y0 = Math.round(ym-rdy), y1 = Math.round(ym+rdy)
