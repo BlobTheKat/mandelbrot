@@ -587,8 +587,8 @@ function pos(a = false){
 		add(y, shr(ry - HEIGHT*padding/2, z))
 		rz /= 2
 		z++
-		slider.onchange()
 		rx = WIDTH*padding; ry = HEIGHT*padding
+		slider.onchange()
 	}else if(rz < 1.2 && !zoomIn){
 		//zoom out
 		const padding = 1 - .5/rz
@@ -596,36 +596,18 @@ function pos(a = false){
 		add(y, shr(ry - HEIGHT*padding, z))
 		rz *= 2
 		z--
-		slider.onchange()
 		rx = WIDTH*padding/2
 		ry = HEIGHT*padding/2
+		slider.onchange()
 	}else if(rx < 0 || ry < 0 || rx > WIDTH-WIDTH/rz || ry > HEIGHT-HEIGHT/rz){
 		//pan
 		const padding = .5 - .5/rz
 		add(x, shr(rx - WIDTH*padding, z))
 		add(y, shr(ry - HEIGHT*padding, z))
 		rx = WIDTH*padding; ry = HEIGHT*padding
+		draw()
 	}else return drawToMain()
-	/*if(!zoomIn){
-		add(x, shr(-rx - WIDTH >> 2, z))
-		add(y, shr(-ry - HEIGHT >> 2, z))
-	if(rz <= 1.2){
-			z--
-			rz *= 2
-		}
-		rx = -(WIDTH >> 3) * rz
-		ry = -(HEIGHT >> 3) * rz
-		
-	}else{
-		add(x, shr(-rx, z))
-		add(y, shr(-ry, z))
-		z++
-		rx = 0
-		ry = 0
-		rz /= 2
-	}*/
 	zoomIn = false
-	draw()
 }
 let click = false, mx = 0, my = 0
 let pxrt = devicePixelRatio
