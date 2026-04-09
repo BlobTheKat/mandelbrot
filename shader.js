@@ -788,10 +788,10 @@ onkeydown = e => {keypresses[e.key]&&e.preventDefault()}
 
 
 onresize(null)
-supersample.onchange = () => {
-	const gain = Math.round(this.value-Math.log2(pxrt/devicePixelRatio))
+supersample.onchange = e => {
+	const gain = Math.round(supersample.value-Math.log2(pxrt/devicePixelRatio))
 	z += gain; rx *= 2**gain; ry *= 2**gain
 	adjWorstHang *= 4**gain
-	pxrt = 2**this.value*devicePixelRatio
-	onresize(event)
+	pxrt = 2**supersample.value*devicePixelRatio
+	onresize(e)
 }
