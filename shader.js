@@ -865,3 +865,8 @@ supersample.onchange = e => {
 document.body.onpointerdown = e => {
 	if(e.target.nodeName == 'INPUT') e.target.setPointerCapture(e.pointerId)
 }
+
+document.documentElement.onfullscreenchange = () => {
+	if(document.fullscreenElement) screen.orientation?.lock?.('landscape')
+	else screen.orientation?.unlock?.()
+}

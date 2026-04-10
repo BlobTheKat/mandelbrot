@@ -2,7 +2,7 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
 		<link rel="shortcut icon" href="/favicon.png" />
 		<meta property="og:title" content="Deep Mandelbrot" />
 		<meta property="og:description" content="Deep Mandelbrot set viewer accelerated using WebGL" />
@@ -31,7 +31,7 @@
 		</select>
   </body>
 	<style>
-		input{ touch-action: manipulation; }
+		input{ touch-action: manipulation; text-shadow: inherit; font: inherit; color: inherit; }
 		canvas{
 			width: 100%;
 			height: 100%;
@@ -58,6 +58,7 @@
 			width: 100%;
 			height: 100%;
 			overflow: hidden;
+			text-shadow: 0 0 8px black;
 		}
 		:root{
 			width: 100%;
@@ -183,14 +184,11 @@
 		}
 		#r:before, #i:before{
 			position: absolute; content: 'r = ' attr(data-v);
-			font-family: monospace;
-			color: white;
-			text-shadow: 0 0 5px black;
 			right: 100%;
 			padding-right: 10px;
 			white-space: pre;
 		}
-		#i:before{ content: 'i = ' attr(data-v) }
+		#i:before{ content: 'i = ' attr(data-v); }
 		#i{ top: 55px }
 		@media screen and (max-width: 600px) and (orientation: portrait){
 			:root{ width: var(--h); height: 100vw; transform: rotate(0.25turn); left: 100%; transform-origin: top left; }
