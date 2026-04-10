@@ -4,16 +4,18 @@ if (!gl) throw "WebGLn't"
 gl.disable(gl.DEPTH_TEST) // No 3d
 gl.disable(gl.CULL_FACE)
 
+const floatExt = !!(gl.getExtension('EXT_color_buffer_float') && gl.getExtension('OES_texture_float_linear'))
 const fb = gl.createFramebuffer(), tex = gl.createTexture()
 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb)
 gl.bindTexture(gl.TEXTURE_2D, tex)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+const lerp = floatExt ? gl.LINEAR : gl.NEAREST
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, lerp)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, lerp)
 gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
-const floatExt = !!(gl.getExtension('EXT_color_buffer_float') && gl.getExtension('OES_texture_float_linear'))
+
 
 function makeShader(type, source) {
 	const shader = gl.createShader(type)
@@ -379,11 +381,12 @@ void main(){
 	f.clear = () => {
 		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb)
 		gl.viewport(0, 0, WIDTH, HEIGHT)
-		gl.clearColor(Infinity, 0, 0, 0)
-		gl.clear(gl.COLOR_BUFFER_BIT)
+		floatExt ? gl.clearBufferfv(gl.COLOR, 0, zeros) : gl.clearBufferuiv(gl.COLOR, 0, zeros2)
 	}
 	return f
 }
+const zeros = new Float32Array(4), zeros2 = new Uint32Array(zeros.buffer)
+zeros[0] = Infinity
 
 const PALETTES = {
 	Rainbow: 6,
@@ -398,7 +401,7 @@ const p2 = gl.createProgram()
 gl.attachShader(p2, vertexShader)
 gl.attachShader(p2, makeShader(gl.FRAGMENT_SHADER, `#version 300 es
 #line 381
-precision mediump float; precision highp int;
+precision mediump float; precision highp int; precision highp usampler2D;
 uniform ${floatExt?'sampler2D':'usampler2D'} tex;
 uniform float steps;
 
@@ -681,7 +684,7 @@ onresize = e => {
 		set(WIDTH * (-.5 / 2**z) - .6, 0, x)
 		set(HEIGHT * (-.5 / 2**z), 0, y)
 	}
-	gl.texImage2D(gl.TEXTURE_2D, 0, floatExt?gl.R32F:gl.R32UI, WIDTH, HEIGHT, 0, gl.RED, floatExt?gl.FLOAT:gl.UNSIGNED_INT, null)
+	gl.texImage2D(gl.TEXTURE_2D, 0, floatExt?gl.R32F:gl.R32UI, WIDTH, HEIGHT, 0, floatExt?gl.RED:gl.RED_INTEGER, floatExt?gl.FLOAT:gl.UNSIGNED_INT, null)
 	draw()
 }
 setprecision(P)
