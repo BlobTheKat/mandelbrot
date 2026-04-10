@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
 		<link rel="shortcut icon" href="/favicon.png" />
-    <title>WebGL Mandelbrot</title>
-    <script src="shader.js" defer></script>
-  </head>
-  <body>
-    <canvas id="canvas" width="1024" height="1024"></canvas>
+		<meta property="og:title" content="Deep Mandelbrot" />
+		<meta property="og:description" content="Deep Mandelbrot set viewer accelerated using WebGL" />
+		<meta property="og:image" content="https://mandelbrot-bgn.pages.dev/favicon.png" />
+		<meta property="og:color" content="#EE5522" />
+		<title>Deep Mandelbrot</title>
+		<script src="shader.js" defer></script>
+	</head>
+	<body>
+		<canvas id="canvas" width="1024" height="1024"></canvas>
 		<div title="click to copy coords" id="stats"></div>
 		<input type="range" min="0" max="20" value="4" id="slider" />
 		<div id="info"></div>
@@ -37,6 +41,7 @@
 			transform-origin: bottom left;
 			z-index: 0;
 			background: #000;
+			touch-action: none;
 		}
 		body{
 			font-size: 14px;
@@ -49,11 +54,16 @@
 			background: #444;
 			font-family: AnkaCoder, monospace;
 			color: white;
-		}
-		body, html{
 			width: 100%;
 			height: 100%;
 			overflow: hidden;
+		}
+		:root{
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+			text-size-adjust: none;
+			position: relative;
 		}
 		#stats{
 			cursor: pointer;
@@ -183,5 +193,8 @@
 		}
 		#i:before{ content: 'i = ' attr(data-v) }
 		#i{ top: 55px }
+		@media screen and (max-width: 600px) and (orientation: portrait){
+			:root{ width: var(--h); height: 100vw; transform: rotate(0.25turn); left: 100%; transform-origin: top left; }
+		}
 	</style>
 </html>

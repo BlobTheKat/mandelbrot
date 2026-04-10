@@ -30,21 +30,22 @@ function makeShader(type, source) {
 }
 const vertexShader = makeShader(gl.VERTEX_SHADER, `#version 300 es
 out vec2 uv; void main(){ uv = vec2(gl_VertexID&1, gl_VertexID>>1); gl_Position = vec4(uv*2.-1.,0,1); }`)
-const p1 = gl.createProgram()
-gl.attachShader(p1, vertexShader)
+const prog1 = gl.createProgram()
+gl.attachShader(prog1, vertexShader)
 let fragmentShader = null
 
 const USE_BLOCK = true
 
 function fractalShader(P){
 	console.time('compile')
-	if(fragmentShader) gl.detachShader(p1, fragmentShader)
+	if(fragmentShader) gl.detachShader(prog1, fragmentShader)
 	fragmentShader = makeShader(gl.FRAGMENT_SHADER, `#version 300 es
 #line 30
 precision highp float;
 precision highp int;
 #define P ${P}
 #define big uint[P]
+#define tofloat(a) (float(int(a[0])) + float(a[1]) / 4294967296.)
 #define Check(j, tr, ti, L, R) {\\
 	float _a = float(int(tr[0])) + float(tr[1]) / 4294967296.; \\
 	float _b = float(int(ti[0])) + float(ti[1]) / 4294967296.; \\
@@ -54,8 +55,14 @@ precision highp int;
 	uint _r = a * b; \\
 	uint _x = (a&0xFFFFu)*(b>>16), _y = (a>>16)*(b&0xFFFFu); \\
 	l += (a>>16)*(b>>16)+(_x>>16)+(_y>>16)-uint(int((_r>>16)-(_x&0xFFFFu)-(_y&0xFFFFu))>>16); \\
-	r += _r; \\
-	l += uint(r < _r); \\
+	uint tmp = r + _r; \\
+	l += uint(tmp < _r); \\
+	r = tmp; \\
+}
+void setc(out big a, float b){
+	a[0] = uint(int(floor(b)));
+	a[1] = uint(fract(b) * 4294967296.);
+	for(int i = 2; i < P; i++) a[i] = 0u;
 }
 void multiply(inout big a, big b){
 	uint _carryl = 0u, _carryr = 0u;
@@ -80,14 +87,14 @@ void multiply(inout big a, big b){
 		uint _c2l = 0u, _c2r = carry2r;
 		carry2r = carry2l; carry2l = uint(int(carry2r) >> 31);
 		mult(b[0], a[_i], _c2l, _c2r);
-		_c2l -= a[_i]&-uint(b[0] >= 2147483648u);
+		_c2l -= a[_i]&uint(int(b[0]) >> 31);
 		carry2r += _c2l;
-		carry2l += uint(carry2r < _c2l) - uint(_c2l >= 2147483648u);
+		carry2l += uint(carry2r < _c2l) - uint(_c2l>>31u);
 		_c2l = 0u;
 		mult(a[0], b[_i], _c2l, _c2r);
-		_c2l -= b[_i]&-uint(a[0] >= 2147483648u);
+		_c2l -= b[_i]&uint(int(a[0]) >> 31);
 		carry2r += _c2l;
-		carry2l += uint(carry2r < _c2l) - uint(_c2l >= 2147483648u);
+		carry2l += uint(carry2r < _c2l) - uint(_c2l>>31u);
 		_c2l = 0u;
 		_cr += _c2r;
 		_ = uint(_cr < _c2r); _carryr += _;
@@ -101,7 +108,7 @@ void add(inout big a, big b){
 	uint _carry = 0u;
 	for(int _i = P - 1;_i > 0;_i--){
 		a[_i] += b[_i] - _carry;
-		_carry ^= -uint((_carry^a[_i]) < (_carry^b[_i]));
+		_carry ^= (_carry^a[_i]) < (_carry^b[_i]) ? -1u : 0u;
 	}
 	a[0] += b[0] - _carry;
 }
@@ -111,17 +118,17 @@ void addw(inout big a, big b, uint w){
 	mult(b[P-1], w, _h, _l);
 	for(int _i = P - 1;_i > 1;_i--){
 		a[_i] += _h;
-		_carry ^= -uint((_carry^a[_i]) < (_carry^_h));
+		_carry ^= (_carry^a[_i]) < (_carry^_h) ? -1u : 0u;
 		mult(b[_i-1], w, _h, _l);
 		a[_i] += _l - _carry;
-		_carry ^= -uint((_carry^a[_i]) < (_carry^_l));
+		_carry ^= (_carry^a[_i]) < (_carry^_l) ? -1u : 0u;
 	}
 	a[1] += _h;
-	_carry ^= -uint((_carry^a[1]) < (_carry^_h));
+	_carry ^= (_carry^a[1]) < (_carry^_h) ? -1u : 0u;
 	mult(b[0], w, _h, _l);
 	_h = uint(int(_h << 16) >> 16);
 	a[1] += _l - _carry;
-	_carry ^= -uint((_carry^a[1]) < (_carry^_l));
+	_carry ^= (_carry^a[1]) < (_carry^_l) ? -1u : 0u;
 	a[0] += _h - _carry;
 }
 void addc(inout big a, float b){
@@ -138,7 +145,7 @@ void take(inout big a, big b){
 	uint _c = 0u;
 	for(int _i = P - 1;_i > 0;_i--){
 		a[_i] -= b[_i] - _c;
-		_c ^= -uint((_c^a[_i]) > (_c^~b[_i]));
+		_c ^= (_c^a[_i]) > (_c^~b[_i]) ? -1u : 0u;
 	}
 	a[0] -= b[0] - _c;
 }
@@ -147,11 +154,6 @@ void neg(inout big a){
 	for(int _i = P - 1; _i >= 0; _i--) _o &= uint((a[_i] = ~a[_i] + _o)==0u);
 }
 #define absolute(a) if(a[0] >= 2147483648u) neg(a)
-void setc(out big a, float b){
-	a[0] = uint(int(floor(b)));
-	a[1] = uint(mod(b,1.) * 4294967296.);
-	for(int i = 2; i < P; i++) a[i] = 0u;
-}
 ${USE_BLOCK?`uniform Pos{ uvec4 x[${P+3>>2}]; uvec4 y[${P+3>>2}]; };`:`uniform uvec4 x[${P+3>>2}]; uniform uvec4 y[${P+3>>2}];`}
 uniform vec2 p;
 uniform uint steps;
@@ -334,11 +336,11 @@ void main(){
 	}
 	ret = ${floatExt?'':'floatBitsToUint'}(${fractal.value}());
 }`)
-	gl.attachShader(p1, fragmentShader)
-	gl.linkProgram(p1)
-	if (!gl.getProgramParameter(p1, gl.LINK_STATUS))
-		throw new Error("Unable to initialize the shader p1: " + gl.getProgramInfoLog(p1))
-	gl.useProgram(p1)
+	gl.attachShader(prog1, fragmentShader)
+	gl.linkProgram(prog1)
+	if (!gl.getProgramParameter(prog1, gl.LINK_STATUS))
+		throw new Error("Unable to initialize the shader prog1: " + gl.getProgramInfoLog(prog1))
+	gl.useProgram(prog1)
 	let arr
 	let BLOCK_SPLIT
 	if(USE_BLOCK){
@@ -347,20 +349,20 @@ void main(){
 		gl.bindBuffer(gl.UNIFORM_BUFFER, ubo)
 		gl.bufferData(gl.UNIFORM_BUFFER, BLOCK_SPLIT<<3, gl.DYNAMIC_DRAW)
 		gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
-		gl.uniformBlockBinding(p1, gl.getUniformBlockIndex(p1, 'Pos'), 0)
+		gl.uniformBlockBinding(prog1, gl.getUniformBlockIndex(prog1, 'Pos'), 0)
 		arr = new Uint32Array(P*8)
 	}
 	console.timeEnd('compile')
 	let uniX, uniY
 	if(!USE_BLOCK){
-		uniX = gl.getUniformLocation(p1, "x")
-		uniY = gl.getUniformLocation(p1, "y")
+		uniX = gl.getUniformLocation(prog1, "x")
+		uniY = gl.getUniformLocation(prog1, "y")
 	}
-	const uniP = gl.getUniformLocation(p1, "p")
-	const uniZ = gl.getUniformLocation(p1, "z")
-	const uniSteps = gl.getUniformLocation(p1, "steps")
+	const uniP = gl.getUniformLocation(prog1, "p")
+	const uniZ = gl.getUniformLocation(prog1, "z")
+	const uniSteps = gl.getUniformLocation(prog1, "steps")
 	const f = (x, y, z, steps = 100, px=0, py=0, pw=WIDTH, ph=HEIGHT) => {
-		gl.useProgram(p1)
+		gl.useProgram(prog1)
 		gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fb)
 		gl.viewport(px, py, pw, ph)
 		if(USE_BLOCK){
@@ -401,8 +403,8 @@ const p2 = gl.createProgram()
 gl.attachShader(p2, vertexShader)
 gl.attachShader(p2, makeShader(gl.FRAGMENT_SHADER, `#version 300 es
 #line 381
-precision mediump float; precision highp int; precision highp usampler2D;
-uniform ${floatExt?'sampler2D':'usampler2D'} tex;
+precision highp float; precision highp int;
+uniform ${floatExt?'sampler2D':'highp usampler2D'} tex;
 uniform float steps;
 
 vec3 Rainbow(float a){
@@ -445,9 +447,10 @@ vec3 Burning(float a){
 
 vec3 BlueGold(float a){
 	a = mod(a*.5+1.,2.);
-	#define gold(x) a<.5?vec3(1.,1.-1.2*a*a,1.-a*2.):vec3(2.-a*2.,(1.-a)*(1.-a)*2.8,0)
+#define gold(x) a<.5?vec3(1.,1.-1.2*a*a,1.-a*2.):vec3(2.-a*2.,(1.-a)*(1.-a)*2.8,0)
 	if(a >= 1.){ a -= 1.; return 1.-(gold(a)); }
 	else return gold(a);
+#undef gold
 }
 
 vec3 EightColor(float a){
@@ -564,7 +567,7 @@ const c2 = document.createElement('canvas').getContext('2d', {willReadFrequently
 let steps = z*2**slider.value
 slider.onchange = e => {
 	steps = Math.floor(z*2**slider.value)
-	if(e){ mx = WIDTH / 2; my = HEIGHT / 2 }
+	if(e){ p0x = WIDTH / 2; p0y = HEIGHT / 2 }
 	draw()
 }
 let adjWorstHang = 0, drawNum = 0
@@ -583,7 +586,7 @@ function draw(){
 	let divs = Math.min(32-Math.clz32(WIDTH*HEIGHT>>13), Math.max(0, Math.floor(Math.log2(adjWorstHang/100))))
 	if(divs){
 		if(divs < 4) divs = 4
-		const px = mx/rz+rx, py = my/rz+ry
+		const px = (p1>-1?(p1x+p0x)*.5:p0x)/rz+rx, py = (p1>-1?(p1y+p0y)*.5:p0y)/rz+ry
 		const xDivs = 1<<(divs+1>>1), yDivs = 1<<(divs>>1)
 		const chs = Array.from({length: xDivs*yDivs}, (_, i) => ({x: ((i&(xDivs-1))+.5)/xDivs*WIDTH, y: (Math.floor(i/xDivs)+.5)/yDivs*HEIGHT})).sort((a,b) => {const ax=a.x-px,ay=a.y-py,bx=b.x-px,by=b.y-py; return bx*bx+by*by-ax*ax-ay*ay})
 		const rdx = .5/xDivs*WIDTH, rdy = .5/yDivs*HEIGHT
@@ -672,14 +675,14 @@ function pos(a = false){
 	}else return drawToMain()
 	zoomIn = false
 }
-let click = false, mx = 0, my = 0
 let pxrt = devicePixelRatio
 onresize = e => {
-	WIDTH = Math.round(visualViewport.width*visualViewport.scale * pxrt)
-	HEIGHT = Math.round(visualViewport.height*visualViewport.scale * pxrt)
+	document.documentElement.style.setProperty('--h', innerHeight + 'px')
+	WIDTH = Math.round(document.documentElement.offsetWidth * pxrt)
+	HEIGHT = Math.round(document.documentElement.offsetHeight * pxrt)
 	gl.canvas.width = innerWidth*devicePixelRatio
 	gl.canvas.height = innerHeight*devicePixelRatio
-	mx = WIDTH / 2; my = HEIGHT / 2
+	p0x = WIDTH / 2; p0y = HEIGHT / 2
 	if(!e){
 		set(WIDTH * (-.5 / 2**z) - .6, 0, x)
 		set(HEIGHT * (-.5 / 2**z), 0, y)
@@ -706,33 +709,72 @@ function wheel(deltaY){
 				else trz = NaN
 				if(d>1) zoomIn = true
 				rz *= d
-				rx += mx * (d - 1) / rz
-				ry += my * (d - 1) / rz
+				rx += p0x * (d - 1) / rz
+				ry += p0y * (d - 1) / rz
 				pos()
 			})
 		}else trz *= d
 		return
 	}
 	rz *= d
-	rx += mx * (d - 1) / rz
-	ry += my * (d - 1) / rz
+	rx += p0x * (d - 1) / rz
+	ry += p0y * (d - 1) / rz
 	pos()
 }
+let p0 = -1, p1 = -1, p0x = 0, p0y = 0, p1x = 0, p1y = 0, p0m = 0, holdTimer = -1
 gl.canvas.onpointerdown = e => {
-	click = !e.button
-	mx = e.clientX * pxrt
-	my = e.clientY * pxrt
+	if(!e.isTrusted || e.pointerId === -1) return
+	if(document.activeElement !== document.body) document.activeElement.blur()
+	e.preventDefault()
+	const x = e.offsetX*pxrt, y = e.offsetY*pxrt
+	if(p0 == -1){
+		p0 = e.pointerId, p0x = x, p0y = y, p0m = 0
+		if(!holdTimer) holdTimer = setTimeout(() => {
+			holdTimer = 0
+			if(p0 !== e.pointerId || p1 !== -1 || p0m > .007) return
+			// long press
+		}, 600)
+	}else if(p1 == -1) p1 = e.pointerId, p1x = x, p1y = y, p0m = Infinity
 	gl.canvas.setPointerCapture(e.pointerId)
 }
-gl.canvas.onpointerup = () => void(click = false)
-gl.canvas.onpointermove = function({clientX, clientY}){
-	if(click){
-		rx -= (clientX * pxrt - mx) / rz
-		ry -= (clientY * pxrt - my) / rz
+gl.canvas.onpointerup = gl.canvas.onpointerleave = e => {
+	if(!e.isTrusted || e.pointerId === -1) return
+	e.preventDefault()
+	if(p0 == e.pointerId){
+		p0 = p1
+		holdTimer && (clearTimeout(holdTimer), holdTimer = 0)
+		if(p0m < 0.003){
+			// click
+		}
+		if(p1 != -1) p0x = p1x, p0y = p1y, p1 = -1
+	}else if(p1 == e.pointerId) p1 = -1
+}
+gl.canvas.onpointermove = e => {
+	if(!e.isTrusted || e.pointerId === -1) return
+	e.preventDefault()
+	const x = e.offsetX*pxrt, y = e.offsetY*pxrt
+	if(p0 == -1){ p0x = x; p0y = y; return }
+	if(p1 == -1 && p0 == e.pointerId){
+		rx -= (x - p0x) / rz
+		ry -= (y - p0y) / rz
+		pos()
+		p0m += Math.abs(x-p0x) + Math.abs(y-p0y)
+		p0x = x; p0y = y
+	}else{
+		const o0x = p0x, o0y = p0y, o1x = p1x, o1y = p1y
+		if(p0 == e.pointerId) p0x = x, p0y = y
+		else if(p1 == e.pointerId) p1x = x, p1y = y
+		else return
+		const n0x = p0x, n0y = p0y, n1x = p1x, n1y = p1y
+		const ox = o0x-o1x, oy = o0y-o1y, nx = n0x-n1x, ny = n0y-n1y
+		const zoom = (nx*nx+ny*ny)/(ox*ox+oy*oy) // Squared makes zooming less tedious
+		const omx = o1x+ox*.5, omy = o1y+oy*.5, nmx = n1x+nx*.5, nmy = n1y+ny*.5
+		rx += omx/rz; ry += omy/rz
+		rz *= zoom
+		if(zoom > 1) zoomIn = true
+		rx -= nmx/rz; ry -= nmy/rz
 		pos()
 	}
-	mx = clientX * pxrt
-	my = clientY * pxrt
 }
 function arrToNum(x){
 	let n = 10000000000n ** BigInt(P)
@@ -755,7 +797,7 @@ function getStats(){
 	add(a, y)
 	const yStr = arrToNum(a)
 	const exp = (z - Math.log2(canvas.height) + 1) / 3.321928094887362 + Math.log10(rz)
-	return `r: ${xStr}\ni: ${yStr}\nzoom: ${(10**((exp%1+1)%1)).toFixed(2)}x10^${Math.floor(exp)}\nprecision: ${P*32} bits\niter: ${steps}`
+	return `r: ${xStr}\ni: ${yStr}\nzoom: ${(10**((exp%1+1)%1)).toFixed(2)}x10^${Math.floor(exp)}\nprecision: ${P*32} bits\niter: ${steps} L:${(1/rz).toFixed(2).slice(1)}`
 }
 stats.onclick = () => navigator.clipboard.writeText(getStats())
 
@@ -772,8 +814,8 @@ auto.onclick = () => {
 	isAuto = true
 	auto.style.border = '#fff 2px solid'
 	let last = performance.now()/30
-	mx = WIDTH/2
-	my = HEIGHT/2
+	p0x = WIDTH/2
+	p0y = HEIGHT/2
 	requestAnimationFrame(function A(){
 		if(!isAuto) return
 		requestAnimationFrame(A)
