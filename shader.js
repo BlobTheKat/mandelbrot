@@ -718,9 +718,14 @@ function wheel(deltaY){
 	ry += my * (d - 1) / rz
 	pos()
 }
-onmousedown = ({target}) => void(click = target == canvas)
-onmouseup = () => void(click = false)
-onmousemove = function({clientX, clientY}){
+gl.canvas.onpointerdown = e => {
+	click = !e.button
+	mx = e.clientX * pxrt
+	my = e.clientY * pxrt
+	gl.canvas.setPointerCapture(e.pointerId)
+}
+gl.canvas.onpointerup = () => void(click = false)
+gl.canvas.onpointermove = function({clientX, clientY}){
 	if(click){
 		rx -= (clientX * pxrt - mx) / rz
 		ry -= (clientY * pxrt - my) / rz
@@ -781,7 +786,6 @@ save.onclick = () => { drawToMain(); gl.canvas.toBlob(blob => {
 	a.href = URL.createObjectURL(blob)
 	a.download = 'fractal'
 	a.click()
-	draw()
 }) }
 fs.onclick = () => document.body.requestFullscreen()
 let lock = false
