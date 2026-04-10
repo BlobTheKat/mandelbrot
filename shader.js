@@ -678,10 +678,11 @@ function pos(a = false){
 let pxrt = devicePixelRatio
 onresize = e => {
 	document.documentElement.style.setProperty('--h', innerHeight + 'px')
-	WIDTH = Math.round(document.documentElement.offsetWidth * pxrt)
-	HEIGHT = Math.round(document.documentElement.offsetHeight * pxrt)
-	gl.canvas.width = innerWidth*devicePixelRatio
-	gl.canvas.height = innerHeight*devicePixelRatio
+	const w = gl.canvas.offsetWidth, h = gl.canvas.offsetHeight
+	WIDTH = Math.round(w * pxrt)
+	HEIGHT = Math.round(h * pxrt)
+	gl.canvas.width = w*devicePixelRatio
+	gl.canvas.height = h*devicePixelRatio
 	p0x = WIDTH / 2; p0y = HEIGHT / 2
 	if(!e){
 		set(WIDTH * (-.5 / 2**z) - .6, 0, x)
@@ -721,7 +722,7 @@ function wheel(deltaY){
 	ry += p0y * (d - 1) / rz
 	pos()
 }
-let p0 = -1, p1 = -1, p0x = 0, p0y = 0, p1x = 0, p1y = 0, p0m = 0, holdTimer = -1
+let p0 = -1, p1 = -1, p0x = 0, p0y = 0, p1x = 0, p1y = 0, p0m = 0, holdTimer = 0
 gl.canvas.onpointerdown = e => {
 	if(!e.isTrusted || e.pointerId === -1) return
 	if(document.activeElement !== document.body) document.activeElement.blur()
@@ -733,18 +734,26 @@ gl.canvas.onpointerdown = e => {
 			holdTimer = 0
 			if(p0 !== e.pointerId || p1 !== -1 || p0m > .007) return
 			// long press
+			p0 = -1
+			
 		}, 600)
 	}else if(p1 == -1) p1 = e.pointerId, p1x = x, p1y = y, p0m = Infinity
 	gl.canvas.setPointerCapture(e.pointerId)
 }
+let lastTap = 0
 gl.canvas.onpointerup = gl.canvas.onpointerleave = e => {
 	if(!e.isTrusted || e.pointerId === -1) return
 	e.preventDefault()
 	if(p0 == e.pointerId){
 		p0 = p1
 		holdTimer && (clearTimeout(holdTimer), holdTimer = 0)
-		if(p0m < 0.003){
+		if(p0m <= 4){
 			// click
+			if(lastTap){
+				clearTimeout(lastTap)
+				lastTap = 0
+				wheel(-100)
+			}else lastTap = setTimeout(() => (lastTap = 0, keypresses.Tab()), 500)
 		}
 		if(p1 != -1) p0x = p1x, p0y = p1y, p1 = -1
 	}else if(p1 == e.pointerId) p1 = -1
@@ -829,7 +838,7 @@ save.onclick = () => { drawToMain(); gl.canvas.toBlob(blob => {
 	a.download = 'fractal'
 	a.click()
 }) }
-fs.onclick = () => document.body.requestFullscreen()
+fs.onclick = () => document.documentElement.requestFullscreen()
 let lock = false
 lp.onclick = () => {
 	lp.style.border = (lock = !lock) ? '2px white solid' : ''
@@ -852,4 +861,7 @@ supersample.onchange = e => {
 	adjWorstHang *= 4**gain
 	pxrt = 2**supersample.value*devicePixelRatio
 	onresize(e)
+}
+document.body.onpointerdown = e => {
+	if(e.target.nodeName == 'INPUT') e.target.setPointerCapture(e.pointerId)
 }
